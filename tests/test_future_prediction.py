@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 from PIL import Image
 
+from videogpt import future_prediction
 from videogpt.future_prediction import main
 from videogpt.surgwmbench_data import DENSE_TARGET, SPARSE_TARGET, sample_windows
 
@@ -327,3 +329,122 @@ def test_native_videogpt_requires_real_checkpoint(tmp_path: Path):
                 str(tmp_path / "metrics.json"),
             ]
         )
+
+
+def test_native_eval_reuses_one_prediction_for_report_horizons_and_artifacts(tmp_path: Path, monkeypatch):
+    root = _make_dataset(tmp_path)
+    checkpoint = tmp_path / "model.ckpt"
+    checkpoint.write_text("fake", encoding="utf-8")
+    metrics_path = tmp_path / "native_metrics.json"
+    calls = []
+
+    def fake_native_sampler(dataset_root, context_frame_paths, args):
+        del dataset_root, context_frame_paths
+        calls.append(args.prediction_horizon)
+        return [
+            np.full((args.image_size, args.image_size, 3), idx, dtype=np.uint8)
+            for idx in range(args.prediction_horizon)
+        ]
+
+    monkeypatch.setattr(future_prediction, "sample_native_videogpt_future_frames", fake_native_sampler)
+
+    main(
+        [
+            "--phase",
+            "eval",
+            "--prediction-task",
+            "future_frames",
+            "--data-track",
+            "sparse_20_anchor",
+            "--dataset-root",
+            str(root),
+            "--manifest",
+            "manifests/test.jsonl",
+            "--checkpoint",
+            str(checkpoint),
+            "--context-frames",
+            "5",
+            "--prediction-horizon",
+            "15",
+            "--report-horizons",
+            "5",
+            "10",
+            "15",
+            "--max-clips",
+            "1",
+            "--max-windows",
+            "1",
+            "--frame-predictor",
+            "native_videogpt",
+            "--seed",
+            "123",
+            "--max-sample-artifacts",
+            "1",
+            "--output",
+            str(metrics_path),
+        ]
+    )
+
+    payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+    assert calls == [15]
+    assert payload["seed"] == 123
+    assert payload["report_horizons"] == [5, 10, 15]
+    assert set(payload["horizon_metrics"]) == {"5", "10", "15"}
+    assert payload["horizon_metrics"]["5"]["num_windows"] == 1
+    assert len(payload["sample_artifacts"][0]["pred_frames"]) == 15
+
+
+def test_native_train_dry_run_exports_sparse_twenty_anchor_videos_and_commands(tmp_path: Path):
+    root = _make_dataset(tmp_path)
+    output_dir = tmp_path / "native_train"
+
+    main(
+        [
+            "--phase",
+            "train",
+            "--prediction-task",
+            "future_frames",
+            "--data-track",
+            "sparse_20_anchor",
+            "--dataset-root",
+            str(root),
+            "--train-manifest",
+            "manifests/train.jsonl",
+            "--val-manifest",
+            "manifests/val.jsonl",
+            "--context-frames",
+            "5",
+            "--prediction-horizon",
+            "15",
+            "--max-clips",
+            "1",
+            "--epochs",
+            "1",
+            "--output-dir",
+            str(output_dir),
+            "--frame-predictor",
+            "native_videogpt",
+            "--native-dry-run",
+        ]
+    )
+
+    checkpoint = json.loads(
+        (output_dir / "videogpt_surgwmbench_native_checkpoint.json").read_text(encoding="utf-8")
+    )
+    assert checkpoint["native_dry_run"] is True
+    assert checkpoint["trained_native_model"] is False
+    assert checkpoint["num_train_windows"] == 1
+    assert len(checkpoint["commands"]) == 2
+
+    train_videos = sorted((output_dir / "native_data" / "train" / "surgwmbench").glob("*.mp4"))
+    val_videos = sorted((output_dir / "native_data" / "test" / "surgwmbench").glob("*.mp4"))
+    assert len(train_videos) == 1
+    assert len(val_videos) == 1
+    import imageio.v2 as imageio
+
+    for video_path in train_videos + val_videos:
+        reader = imageio.get_reader(video_path)
+        try:
+            assert sum(1 for _ in reader) == 20
+        finally:
+            reader.close()

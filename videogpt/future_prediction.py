@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import numpy as np
 from PIL import Image
@@ -15,6 +17,8 @@ from .surgwmbench_data import (
     SPARSE_TRACK,
     default_context_frames,
     default_prediction_horizon,
+    load_annotation,
+    read_jsonl,
     resolve_manifest,
     sample_windows,
     trajectory_target_for_track,
@@ -55,9 +59,28 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-sample-artifacts", type=int, default=2)
     parser.add_argument("--image-size", type=int, default=64)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--mock-model", choices=("none", "copy_last"), default="none")
     parser.add_argument("--frame-predictor", choices=("copy_last", "native_videogpt"), default="copy_last")
     parser.add_argument("--trajectory-predictor", choices=("constant_velocity", "copy_last"), default="constant_velocity")
+    parser.add_argument("--report-horizons", nargs="*", type=int, default=None)
+    parser.add_argument("--native-data-dir", type=Path, default=None)
+    parser.add_argument("--vqvae-checkpoint", type=Path, default=None)
+    parser.add_argument("--vqvae-output-dir", type=Path, default=None)
+    parser.add_argument("--gpt-output-dir", type=Path, default=None)
+    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--gpus", type=int, default=1)
+    parser.add_argument("--native-dry-run", action="store_true")
+    parser.add_argument("--vqvae-embedding-dim", type=int, default=64)
+    parser.add_argument("--vqvae-n-codes", type=int, default=512)
+    parser.add_argument("--vqvae-n-hiddens", type=int, default=64)
+    parser.add_argument("--vqvae-n-res-layers", type=int, default=2)
+    parser.add_argument("--gpt-hidden-dim", type=int, default=384)
+    parser.add_argument("--gpt-heads", type=int, default=4)
+    parser.add_argument("--gpt-layers", type=int, default=4)
+    parser.add_argument("--gpt-dropout", type=float, default=0.1)
+    parser.add_argument("--gpt-attn-dropout", type=float, default=0.1)
     return parser
 
 
@@ -73,10 +96,22 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         args.prediction_horizon,
         args.interpolation_method,
     )
+    validate_report_horizons(args)
     if args.phase == "train":
         train(args)
     else:
         evaluate(args)
+
+
+def validate_report_horizons(args: argparse.Namespace) -> None:
+    if not args.report_horizons:
+        return
+    for horizon in args.report_horizons:
+        validate_track_settings(args.data_track, args.context_frames, horizon, args.interpolation_method)
+        if horizon > args.prediction_horizon:
+            raise ValueError(
+                f"--report-horizons values must be <= --prediction-horizon: {horizon} > {args.prediction_horizon}"
+            )
 
 
 def train(args: argparse.Namespace) -> None:
@@ -91,6 +126,11 @@ def train(args: argparse.Namespace) -> None:
     train_windows = _load_windows(args, train_manifest)
     val_windows = _load_windows(args, val_manifest)
 
+    if args.frame_predictor == "native_videogpt" and args.mock_model != "copy_last":
+        native_checkpoint = train_native_videogpt(args, train_manifest, val_manifest, train_windows, val_windows)
+        print(json.dumps(native_checkpoint, indent=2))
+        return
+
     checkpoint_path = args.output_dir / "videogpt_surgwmbench_adapter_checkpoint.json"
     checkpoint = {
         "dataset_name": "SurgWMBench",
@@ -103,6 +143,7 @@ def train(args: argparse.Namespace) -> None:
         "context_frames": args.context_frames,
         "prediction_horizon": args.prediction_horizon,
         "epochs": args.epochs,
+        "seed": args.seed,
         "frame_predictor": args.frame_predictor,
         "trajectory_predictor": args.trajectory_predictor,
         "device": args.device,
@@ -122,6 +163,149 @@ def train(args: argparse.Namespace) -> None:
     print(json.dumps({"checkpoint": str(checkpoint_path), "num_train_windows": len(train_windows), "num_val_windows": len(val_windows)}, indent=2))
 
 
+def train_native_videogpt(
+    args: argparse.Namespace,
+    train_manifest: Path,
+    val_manifest: Path,
+    train_windows: Sequence[Any],
+    val_windows: Sequence[Any],
+) -> Dict[str, Any]:
+    if args.data_track != SPARSE_TRACK:
+        raise ValueError("native_videogpt training currently supports only sparse_20_anchor")
+    if args.prediction_task not in {"future_frames", "future_joint"}:
+        raise ValueError("native_videogpt training predicts frames; use future_frames or future_joint")
+    if args.epochs <= 0 and not args.native_dry_run:
+        raise ValueError("native_videogpt training requires --epochs > 0, or use --native-dry-run")
+
+    data_dir = args.native_data_dir or (args.output_dir / "native_data")
+    vqvae_output_dir = args.vqvae_output_dir or (args.output_dir / "vqvae")
+    gpt_output_dir = args.gpt_output_dir or (args.output_dir / "gpt")
+    export_sparse_manifest_videos(
+        args.dataset_root,
+        train_manifest,
+        data_dir / "train" / "surgwmbench",
+        args.image_size,
+        args.max_clips,
+    )
+    export_sparse_manifest_videos(
+        args.dataset_root,
+        val_manifest,
+        data_dir / "test" / "surgwmbench",
+        args.image_size,
+        args.max_clips,
+    )
+
+    commands: List[List[str]] = []
+    repo_root = Path(__file__).resolve().parents[1]
+    vqvae_checkpoint = args.vqvae_checkpoint
+    if vqvae_checkpoint is None:
+        vqvae_command = [
+            sys.executable,
+            str(repo_root / "scripts" / "train_vqvae.py"),
+            "--data_path",
+            str(data_dir),
+            "--sequence_length",
+            "20",
+            "--resolution",
+            str(args.image_size),
+            "--batch_size",
+            str(args.batch_size),
+            "--num_workers",
+            str(args.num_workers),
+            "--gpus",
+            str(args.gpus),
+            "--max_epochs",
+            str(args.epochs),
+            "--default_root_dir",
+            str(vqvae_output_dir),
+            "--embedding_dim",
+            str(args.vqvae_embedding_dim),
+            "--n_codes",
+            str(args.vqvae_n_codes),
+            "--n_hiddens",
+            str(args.vqvae_n_hiddens),
+            "--n_res_layers",
+            str(args.vqvae_n_res_layers),
+        ]
+        commands.append(vqvae_command)
+        if not args.native_dry_run:
+            run_command(vqvae_command, repo_root)
+            vqvae_checkpoint = latest_checkpoint(vqvae_output_dir)
+        else:
+            vqvae_checkpoint = vqvae_output_dir / "DRY_RUN_VQVAE.ckpt"
+    if vqvae_checkpoint is None:
+        raise RuntimeError(f"No VQ-VAE checkpoint found under {vqvae_output_dir}; set --vqvae-checkpoint")
+
+    gpt_command = [
+        sys.executable,
+        str(repo_root / "scripts" / "train_videogpt.py"),
+        "--data_path",
+        str(data_dir),
+        "--sequence_length",
+        "20",
+        "--resolution",
+        str(args.image_size),
+        "--batch_size",
+        str(args.batch_size),
+        "--num_workers",
+        str(args.num_workers),
+        "--gpus",
+        str(args.gpus),
+        "--max_epochs",
+        str(args.epochs),
+        "--default_root_dir",
+        str(gpt_output_dir),
+        "--vqvae",
+        str(vqvae_checkpoint),
+        "--n_cond_frames",
+        str(args.context_frames),
+        "--hidden_dim",
+        str(args.gpt_hidden_dim),
+        "--heads",
+        str(args.gpt_heads),
+        "--layers",
+        str(args.gpt_layers),
+        "--dropout",
+        str(args.gpt_dropout),
+        "--attn_dropout",
+        str(args.gpt_attn_dropout),
+    ]
+    commands.append(gpt_command)
+    gpt_checkpoint = None
+    if not args.native_dry_run:
+        run_command(gpt_command, repo_root)
+        gpt_checkpoint = latest_checkpoint(gpt_output_dir)
+    else:
+        gpt_checkpoint = gpt_output_dir / "DRY_RUN_VIDEOGPT.ckpt"
+
+    checkpoint_path = args.output_dir / "videogpt_surgwmbench_native_checkpoint.json"
+    checkpoint = {
+        "dataset_name": "SurgWMBench",
+        "baseline": "videogpt",
+        "model": "VideoGPT",
+        "prediction_task": args.prediction_task,
+        "data_track": args.data_track,
+        "trajectory_target": trajectory_target_for_track(args.data_track),
+        "context_frames": args.context_frames,
+        "prediction_horizon": args.prediction_horizon,
+        "seed": args.seed,
+        "epochs": args.epochs,
+        "train_manifest": str(train_manifest),
+        "val_manifest": str(val_manifest),
+        "num_train_windows": len(train_windows),
+        "num_val_windows": len(val_windows),
+        "native_data_dir": str(data_dir),
+        "vqvae_checkpoint": str(vqvae_checkpoint),
+        "gpt_checkpoint": str(gpt_checkpoint) if gpt_checkpoint is not None else None,
+        "trained_native_model": not args.native_dry_run,
+        "native_dry_run": args.native_dry_run,
+        "commands": commands,
+        "timestamp": _timestamp(),
+    }
+    checkpoint_path.write_text(json.dumps(_json_ready(checkpoint), indent=2), encoding="utf-8")
+    return {"checkpoint": str(checkpoint_path), **checkpoint}
+
+
 def evaluate(args: argparse.Namespace) -> None:
     if args.output is None:
         raise ValueError("--output is required for --phase eval")
@@ -130,6 +314,7 @@ def evaluate(args: argparse.Namespace) -> None:
     if not args.checkpoint:
         raise ValueError("--checkpoint is required for --phase eval")
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    seed_everything(args.seed)
 
     manifest = resolve_manifest(args.dataset_root, args.manifest)
     windows = _load_windows(args, manifest)
@@ -146,6 +331,8 @@ def evaluate(args: argparse.Namespace) -> None:
         None: {"image": [], "trajectory": [], "weights": []},
     }
     sample_artifacts: List[Dict[str, Any]] = []
+    report_horizons = sorted(set(args.report_horizons or []))
+    horizon_states = {horizon: new_metric_state() for horizon in report_horizons}
 
     for window_index, window in enumerate(windows):
         weights.append(window.weight)
@@ -153,6 +340,7 @@ def evaluate(args: argparse.Namespace) -> None:
         by_difficulty[difficulty_key]["weights"].append(window.weight)
 
         pred_coords = None
+        pred_frames = None
         if args.prediction_task in {"future_trajectory", "future_joint"}:
             pred_coords = predict_trajectory(window.context_coords, args.prediction_horizon, args.trajectory_predictor)
             row_metrics = trajectory_metrics(pred_coords, window.future_coords)
@@ -167,6 +355,17 @@ def evaluate(args: argparse.Namespace) -> None:
             image_rows.append(image_row)
             by_difficulty[difficulty_key]["image"].append(image_row)
 
+        for horizon, state in horizon_states.items():
+            record_horizon_metrics(
+                state=state,
+                args=args,
+                window=window,
+                difficulty_key=difficulty_key,
+                horizon=horizon,
+                pred_coords=pred_coords,
+                pred_frames=pred_frames,
+            )
+
         if len(sample_artifacts) < args.max_sample_artifacts:
             sample_artifacts.append(
                 write_sample_artifact(
@@ -174,8 +373,7 @@ def evaluate(args: argparse.Namespace) -> None:
                     len(sample_artifacts),
                     window,
                     pred_coords,
-                    image_row is not None,
-                    args,
+                    pred_frames,
                 )
             )
 
@@ -190,6 +388,8 @@ def evaluate(args: argparse.Namespace) -> None:
         "interpolation_method": args.interpolation_method if args.data_track == DENSE_TRACK else None,
         "context_frames": args.context_frames,
         "prediction_horizon": args.prediction_horizon,
+        "report_horizons": report_horizons,
+        "seed": args.seed,
         "checkpoint": str(args.checkpoint),
         "image_metrics_overall": aggregate_metric_dicts(image_rows, weights) if image_rows else empty_image_metrics(),
         "trajectory_metrics_overall": aggregate_metric_dicts(trajectory_rows, weights) if trajectory_rows else empty_trajectory_metrics(),
@@ -198,8 +398,25 @@ def evaluate(args: argparse.Namespace) -> None:
         "num_windows": len(windows),
         "timestamp": _timestamp(),
     }
+    if horizon_states:
+        result["horizon_metrics"] = {
+            str(horizon): summarize_metric_state(horizon, state)
+            for horizon, state in horizon_states.items()
+        }
     args.output.write_text(json.dumps(_json_ready(result), indent=2), encoding="utf-8")
     print(json.dumps({"output": str(args.output), "num_windows": len(windows)}, indent=2))
+
+
+def seed_everything(seed: int) -> None:
+    np.random.seed(seed)
+    try:
+        import torch
+
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+    except Exception:
+        pass
 
 
 def _load_windows(args: argparse.Namespace, manifest: Path):
@@ -237,6 +454,52 @@ def predict_future_frames(dataset_root: Path, context_frame_paths: Sequence[str]
         return sample_native_videogpt_future_frames(dataset_root, context_frame_paths, args)
     last_context_frame = load_image(dataset_root / context_frame_paths[-1], args.image_size)
     return [last_context_frame.copy() for _ in range(args.prediction_horizon)]
+
+
+def record_horizon_metrics(
+    state: Dict[str, Any],
+    args: argparse.Namespace,
+    window: Any,
+    difficulty_key: Optional[str],
+    horizon: int,
+    pred_coords: Optional[Sequence[Sequence[float]]],
+    pred_frames: Optional[Sequence[np.ndarray]],
+) -> None:
+    state["weights"].append(window.weight)
+    state["by_difficulty"][difficulty_key]["weights"].append(window.weight)
+    if args.prediction_task in {"future_trajectory", "future_joint"} and pred_coords is not None:
+        trajectory_row = trajectory_metrics(pred_coords[:horizon], window.future_coords[:horizon])
+        state["trajectory"].append(trajectory_row)
+        state["by_difficulty"][difficulty_key]["trajectory"].append(trajectory_row)
+    if args.prediction_task in {"future_frames", "future_joint"} and pred_frames is not None:
+        target_frames = load_images(args.dataset_root, window.future_frame_paths[:horizon], args.image_size)
+        image_row = image_sequence_metrics(pred_frames[:horizon], target_frames)
+        state["image"].append(image_row)
+        state["by_difficulty"][difficulty_key]["image"].append(image_row)
+
+
+def new_metric_state() -> Dict[str, Any]:
+    return {
+        "image": [],
+        "trajectory": [],
+        "weights": [],
+        "by_difficulty": {
+            "low": {"image": [], "trajectory": [], "weights": []},
+            "medium": {"image": [], "trajectory": [], "weights": []},
+            "high": {"image": [], "trajectory": [], "weights": []},
+            None: {"image": [], "trajectory": [], "weights": []},
+        },
+    }
+
+
+def summarize_metric_state(horizon: int, state: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "prediction_horizon": horizon,
+        "image_metrics_overall": aggregate_metric_dicts(state["image"], state["weights"]) if state["image"] else empty_image_metrics(),
+        "trajectory_metrics_overall": aggregate_metric_dicts(state["trajectory"], state["weights"]) if state["trajectory"] else empty_trajectory_metrics(),
+        "metrics_by_difficulty": build_difficulty_metrics(state["by_difficulty"]),
+        "num_windows": len(state["weights"]),
+    }
 
 
 def load_images(dataset_root: Path, frame_paths: Sequence[str], image_size: int) -> List[np.ndarray]:
@@ -340,8 +603,7 @@ def write_sample_artifact(
     index: int,
     window: Any,
     pred_coords: Optional[List[List[float]]],
-    has_frame_prediction: bool,
-    args: argparse.Namespace,
+    pred_frames: Optional[Sequence[np.ndarray]],
 ) -> Dict[str, Any]:
     payload = {
         "clip_id": window.clip_id,
@@ -355,8 +617,7 @@ def write_sample_artifact(
     json_path = artifact_dir / f"sample_{index:03d}.json"
     json_path.write_text(json.dumps(_json_ready(payload), indent=2), encoding="utf-8")
     artifact: Dict[str, Any] = {"metadata": str(json_path)}
-    if has_frame_prediction:
-        pred_frames = predict_future_frames(args.dataset_root, window.context_frame_paths, args)
+    if pred_frames is not None:
         frames_dir = artifact_dir / f"sample_{index:03d}_pred_frames"
         frames_dir.mkdir(parents=True, exist_ok=True)
         frame_paths: List[str] = []
@@ -366,6 +627,47 @@ def write_sample_artifact(
             frame_paths.append(str(frame_path))
         artifact["pred_frames"] = frame_paths
     return artifact
+
+
+def export_sparse_manifest_videos(
+    dataset_root: Path,
+    manifest: Path,
+    split_dir: Path,
+    image_size: int,
+    max_clips: Optional[int],
+) -> None:
+    import imageio.v2 as imageio
+
+    split_dir.mkdir(parents=True, exist_ok=True)
+    for row in read_jsonl(manifest, max_clips=max_clips):
+        annotation = load_annotation(dataset_root, row)
+        anchors = sorted(annotation.get("human_anchors", []), key=lambda item: int(item["anchor_idx"]))
+        if len(anchors) != 20:
+            raise ValueError(f"{row.get('patient_id')}/{row.get('trajectory_id')} expected exactly 20 human anchors")
+        frame_path_by_index = {
+            int(frame["local_frame_idx"]): str(frame["frame_path"])
+            for frame in annotation.get("frames", [])
+        }
+        output_path = split_dir / f"{safe_name(row.get('patient_id'), row.get('trajectory_id'))}.mp4"
+        frame_paths = [frame_path_by_index[int(anchor["local_frame_idx"])] for anchor in anchors]
+        frames = [load_image(dataset_root / frame_path, image_size) for frame_path in frame_paths]
+        imageio.mimsave(output_path, frames, fps=8, macro_block_size=1)
+
+
+def safe_name(patient_id: Any, trajectory_id: Any) -> str:
+    raw = f"{patient_id}_{trajectory_id}"
+    return "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in raw)
+
+
+def run_command(command: Sequence[str], cwd: Path) -> None:
+    subprocess.run(list(command), cwd=cwd, check=True)
+
+
+def latest_checkpoint(output_dir: Path) -> Path:
+    checkpoints = sorted(output_dir.glob("**/*.ckpt"), key=lambda item: item.stat().st_mtime)
+    if not checkpoints:
+        raise RuntimeError(f"No checkpoint found under {output_dir}")
+    return checkpoints[-1]
 
 
 def build_difficulty_metrics(grouped: Dict[Optional[str], Dict[str, List[Any]]]) -> Dict[str, Any]:
