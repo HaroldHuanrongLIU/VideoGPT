@@ -161,9 +161,9 @@ def evaluate(args: argparse.Namespace) -> None:
 
         image_row = None
         if args.prediction_task in {"future_frames", "future_joint"}:
-            pred_frame = predict_first_future_frame(args.dataset_root, window.context_frame_paths, args)
-            target_frame = load_image(args.dataset_root / window.future_frame_paths[0], args.image_size)
-            image_row = image_metrics(pred_frame, target_frame)
+            pred_frames = predict_future_frames(args.dataset_root, window.context_frame_paths, args)
+            target_frames = load_images(args.dataset_root, window.future_frame_paths, args.image_size)
+            image_row = image_sequence_metrics(pred_frames, target_frames)
             image_rows.append(image_row)
             by_difficulty[difficulty_key]["image"].append(image_row)
 
@@ -232,10 +232,15 @@ def predict_trajectory(
     return [[float(item[0]), float(item[1])] for item in predictions]
 
 
-def predict_first_future_frame(dataset_root: Path, context_frame_paths: Sequence[str], args: argparse.Namespace) -> np.ndarray:
+def predict_future_frames(dataset_root: Path, context_frame_paths: Sequence[str], args: argparse.Namespace) -> List[np.ndarray]:
     if args.frame_predictor == "native_videogpt" and args.mock_model != "copy_last":
-        return sample_native_videogpt_first_future_frame(dataset_root, context_frame_paths, args)
-    return load_image(dataset_root / context_frame_paths[-1], args.image_size)
+        return sample_native_videogpt_future_frames(dataset_root, context_frame_paths, args)
+    last_context_frame = load_image(dataset_root / context_frame_paths[-1], args.image_size)
+    return [last_context_frame.copy() for _ in range(args.prediction_horizon)]
+
+
+def load_images(dataset_root: Path, frame_paths: Sequence[str], image_size: int) -> List[np.ndarray]:
+    return [load_image(dataset_root / frame_path, image_size) for frame_path in frame_paths]
 
 
 def load_image(path: Path, image_size: int) -> np.ndarray:
@@ -245,11 +250,11 @@ def load_image(path: Path, image_size: int) -> np.ndarray:
         return np.asarray(image, dtype=np.uint8)
 
 
-def sample_native_videogpt_first_future_frame(
+def sample_native_videogpt_future_frames(
     dataset_root: Path,
     context_frame_paths: Sequence[str],
     args: argparse.Namespace,
-) -> np.ndarray:
+) -> List[np.ndarray]:
     checkpoint = Path(args.checkpoint)
     if checkpoint.suffix == ".json":
         raise RuntimeError(
@@ -296,13 +301,38 @@ def sample_native_videogpt_first_future_frame(
 
     with torch.no_grad():
         samples = model.sample(1, batch)
-    sample = samples[0].detach().cpu()
-    future_frame_idx = min(args.context_frames, sample.shape[1] - 1)
-    frame = sample[:, future_frame_idx].permute(1, 2, 0).numpy()
-    frame_uint8 = np.clip(frame * 255.0, 0, 255).astype(np.uint8)
-    if frame_uint8.shape[:2] != (args.image_size, args.image_size):
-        frame_uint8 = np.asarray(Image.fromarray(frame_uint8).resize((args.image_size, args.image_size)))
-    return frame_uint8
+    sample = samples[0].detach().cpu()  # C, T, H, W in [0, 1]
+    if sample.ndim != 4:
+        raise RuntimeError(f"native_videogpt returned an unexpected sample shape: {tuple(sample.shape)}")
+    available_future = int(sample.shape[1]) - int(args.context_frames)
+    if available_future < int(args.prediction_horizon):
+        raise RuntimeError(
+            "native_videogpt checkpoint generated too few future frames for this horizon: "
+            f"available {available_future}, requested {args.prediction_horizon}"
+        )
+    frames: List[np.ndarray] = []
+    for offset in range(args.prediction_horizon):
+        frame_index = int(args.context_frames) + offset
+        frame = sample[:, frame_index].permute(1, 2, 0).numpy()
+        frame_uint8 = np.clip(frame * 255.0, 0, 255).astype(np.uint8)
+        if frame_uint8.shape[:2] != (args.image_size, args.image_size):
+            frame_uint8 = np.asarray(Image.fromarray(frame_uint8).resize((args.image_size, args.image_size)))
+        frames.append(frame_uint8)
+    return frames
+
+
+def image_sequence_metrics(
+    predictions: Sequence[np.ndarray],
+    targets: Sequence[np.ndarray],
+) -> Dict[str, Optional[float]]:
+    if len(predictions) != len(targets):
+        raise ValueError(
+            f"Prediction and target frame sequence lengths differ: {len(predictions)} vs {len(targets)}"
+        )
+    if not predictions:
+        return empty_image_metrics()
+    rows = [image_metrics(prediction, target) for prediction, target in zip(predictions, targets)]
+    return aggregate_metric_dicts(rows, [1.0] * len(rows))
 
 
 def write_sample_artifact(
@@ -326,10 +356,15 @@ def write_sample_artifact(
     json_path.write_text(json.dumps(_json_ready(payload), indent=2), encoding="utf-8")
     artifact: Dict[str, Any] = {"metadata": str(json_path)}
     if has_frame_prediction:
-        pred_frame = predict_first_future_frame(args.dataset_root, window.context_frame_paths, args)
-        frame_path = artifact_dir / f"sample_{index:03d}_pred_frame.png"
-        Image.fromarray(pred_frame).save(frame_path)
-        artifact["pred_frame"] = str(frame_path)
+        pred_frames = predict_future_frames(args.dataset_root, window.context_frame_paths, args)
+        frames_dir = artifact_dir / f"sample_{index:03d}_pred_frames"
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        frame_paths: List[str] = []
+        for frame_index, pred_frame in enumerate(pred_frames):
+            frame_path = frames_dir / f"{frame_index:03d}.png"
+            Image.fromarray(pred_frame).save(frame_path)
+            frame_paths.append(str(frame_path))
+        artifact["pred_frames"] = frame_paths
     return artifact
 
 

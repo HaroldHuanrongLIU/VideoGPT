@@ -242,6 +242,55 @@ def test_train_and_eval_cli_write_schema_compatible_outputs(tmp_path: Path):
     assert set(payload["image_metrics_overall"]) >= {"mse", "psnr", "ssim", "lpips", "fvd"}
     assert set(payload["metrics_by_difficulty"]) == {"low", "medium", "high", "null"}
     assert len(payload["sample_artifacts"]) == 1
+    assert len(payload["sample_artifacts"][0]["pred_frames"]) == 16
+    assert all(Path(path).exists() for path in payload["sample_artifacts"][0]["pred_frames"])
+
+
+def test_sparse_eval_writes_full_future_frame_sequence(tmp_path: Path):
+    root = _make_dataset(tmp_path)
+    checkpoint = tmp_path / "adapter_checkpoint.json"
+    checkpoint.write_text("{}", encoding="utf-8")
+    metrics_path = tmp_path / "sparse_metrics.json"
+
+    main(
+        [
+            "--phase",
+            "eval",
+            "--prediction-task",
+            "future_joint",
+            "--data-track",
+            "sparse_20_anchor",
+            "--dataset-root",
+            str(root),
+            "--manifest",
+            "manifests/test.jsonl",
+            "--checkpoint",
+            str(checkpoint),
+            "--context-frames",
+            "5",
+            "--prediction-horizon",
+            "15",
+            "--max-clips",
+            "1",
+            "--max-windows",
+            "1",
+            "--mock-model",
+            "copy_last",
+            "--max-sample-artifacts",
+            "1",
+            "--output",
+            str(metrics_path),
+        ]
+    )
+    payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+    assert payload["data_track"] == "sparse_20_anchor"
+    assert payload["trajectory_target"] == SPARSE_TARGET
+    assert payload["context_frames"] == 5
+    assert payload["prediction_horizon"] == 15
+    assert len(payload["sample_artifacts"][0]["pred_frames"]) == 15
+    metadata = json.loads(Path(payload["sample_artifacts"][0]["metadata"]).read_text(encoding="utf-8"))
+    assert len(metadata["future_coords"]) == 15
+    assert len(metadata["predicted_coords"]) == 15
 
 
 def test_native_videogpt_requires_real_checkpoint(tmp_path: Path):
