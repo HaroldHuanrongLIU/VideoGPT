@@ -16,6 +16,8 @@ def main():
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--num_workers', type=int, default=8)
     args = parser.parse_args()
+    if args.max_steps is None or args.max_steps == -1:
+        args.max_steps = 200000
 
     data = VideoData(args)
     # pre-make relevant cached files if necessary
@@ -30,11 +32,10 @@ def main():
     if args.gpus > 1:
         kwargs = dict(distributed_backend='ddp', gpus=args.gpus)
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
-                                            max_steps=200000, **kwargs)
+                                            **kwargs)
 
     trainer.fit(model, data)
 
 
 if __name__ == '__main__':
     main()
-
