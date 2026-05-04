@@ -1,4 +1,8 @@
 __pycache__/
+.venv/
+.uv-cache/
+.uv-python/
+.pytest_cache/
 lightning_logs/
 datasets/
 .ipynb_checkpoints/

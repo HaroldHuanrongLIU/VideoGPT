@@ -29,7 +29,7 @@ _VQVAE = {
 def load_vqvae(model_name, device=torch.device('cpu'), root=os.path.expanduser('~/.cache/videogpt')):
     assert model_name in _VQVAE, f"Invalid model_name: {model_name}"
     filepath = download(_VQVAE[model_name], model_name, root=root)
-    vqvae = VQVAE.load_from_checkpoint(filepath).to(device)
+    vqvae = VQVAE.load_from_checkpoint(filepath, weights_only=False).to(device)
     vqvae.eval()
 
     return vqvae
@@ -43,7 +43,7 @@ _VIDEOGPT = {
 def load_videogpt(model_name, device=torch.device('cpu')):
     assert model_name in _VIDEOGPT, f"Invalid model_name: {model_name}"
     filepath = download(_VIDEOGPT[model_name], model_name)
-    gpt = VideoGPT.load_from_checkpoint(filepath).to(device)
+    gpt = VideoGPT.load_from_checkpoint(filepath, weights_only=False).to(device)
     gpt.eval()
 
     return gpt
