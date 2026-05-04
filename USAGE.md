@@ -33,6 +33,29 @@ The default dataset root used by the scripts is:
 The training path uses official manifests only. Each sample loads the 20
 human-anchor frames identified by `sampled_indices`.
 
+## Changing Dataset Path
+
+Set a different SurgWMBench location with `--dataset-root` in every train or
+eval command:
+
+```bash
+--dataset-root /path/to/SurgWMBench
+```
+
+Manifest paths stay relative to that dataset root. For example, if your dataset
+is under `/data/SurgWMBench`, use:
+
+```bash
+uv run python scripts/train_surgwmbench_vqvae.py \
+  --dataset-root /data/SurgWMBench \
+  --train-manifest manifests/train.jsonl \
+  --val-manifest manifests/val.jsonl
+```
+
+Do not edit the official manifest files or create random splits. Keep using
+`manifests/train.jsonl`, `manifests/val.jsonl`, and `manifests/test.jsonl`
+from the dataset root.
+
 ## Single-GPU Training
 
 Train the SurgWMBench 20-anchor VQ-VAE first:
