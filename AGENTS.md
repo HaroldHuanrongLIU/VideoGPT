@@ -6,25 +6,25 @@
 
 ## Build, Test, and Development Commands
 
-Install dependencies and the local package from the repository root:
+Install dependencies and the local package from the repository root with uv:
 
 ```bash
-pip install -r requirements.txt
-pip install -e .
+uv sync
+uv run python -m pytest -q tests
 ```
 
 Use the help output before changing CLI arguments:
 
 ```bash
-python scripts/train_vqvae.py -h
-python scripts/train_videogpt.py -h
-python scripts/sample_videogpt.py -h
+uv run python scripts/train_vqvae.py -h
+uv run python scripts/train_videogpt.py -h
+uv run python scripts/sample_videogpt.py -h
 ```
 
 Run a lightweight syntax/import check before submitting changes:
 
 ```bash
-python -m compileall videogpt scripts
+uv run python -m compileall videogpt scripts tests
 ```
 
 Dataset examples from the README are shell scripts, for example `sh scripts/preprocess/bair/create_bair_dataset.sh datasets/bair`.
@@ -35,7 +35,7 @@ Use Python with 4-space indentation and follow the existing import style: standa
 
 ## Testing Guidelines
 
-Use `pytest tests` for focused coverage. For new functionality, add tests under `tests/` with names like `test_data.py` or `test_vqvae.py`. Use tiny synthetic tensors, temporary HDF5 files, or minimal video fixtures instead of requiring full BAIR/UCF downloads. At minimum, run `python -m compileall videogpt scripts` and relevant script `-h` commands.
+Use `uv run python -m pytest -q tests` for focused coverage. For new functionality, add tests under `tests/` with names like `test_data.py` or `test_vqvae.py`. Use tiny synthetic tensors, temporary HDF5 files, or minimal video fixtures instead of requiring full BAIR/UCF downloads. At minimum, run `uv run python -m compileall videogpt scripts tests` and relevant script `-h` commands.
 
 ## Commit & Pull Request Guidelines
 
