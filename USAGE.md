@@ -117,10 +117,10 @@ VideoGPT multi-GPU:
 
 ```bash
 uv run python scripts/train_surgwmbench_videogpt.py \
-  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
+  --dataset-root /mnt/data/neurips2026_dataset_track/SurgWMBench \
   --train-manifest manifests/train.jsonl \
   --val-manifest manifests/val.jsonl \
-  --vqvae <path-to-vqvae.ckpt> \
+  --vqvae lightning_logs/version_1/checkpoints/epoch=52-step=5000.ckpt \
   --sequence_length 20 \
   --n_cond_frames 5 \
   --resolution 128 \

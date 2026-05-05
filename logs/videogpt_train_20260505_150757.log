@@ -1,0 +1,427 @@
+Seed set to 1234
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/connectors/logger_connector/logger_connector.py:76: Starting from v1.9.0, `tensorboardX` has been removed as a dependency of the `pytorch_lightning` package, due to potential conflicts with other packages in the ML ecosystem. For this reason, `logger=True` will use `CSVLogger` as the default logger, unless the `tensorboard` or `tensorboardX` packages are found. Please `pip install lightning[extra]` or one of them to enable TensorBoard support by default
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+`Trainer(limit_train_batches=1.0)` was configured so 100% of the batches per epoch will be used..
+`Trainer(limit_val_batches=1.0)` was configured so 100% of the batches will be used..
+You are using a CUDA device ('NVIDIA RTX PRO 6000 Blackwell Server Edition') that has Tensor Cores. To properly utilize them, you should set `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance. For more details, read https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+Initializing distributed: GLOBAL_RANK: 0, MEMBER: 1/3
+[rank: 1] Seed set to 1234
+[rank: 2] Seed set to 1234
+Initializing distributed: GLOBAL_RANK: 1, MEMBER: 2/3
+Initializing distributed: GLOBAL_RANK: 2, MEMBER: 3/3
+----------------------------------------------------------------------------------------------------
+distributed_backend=nccl
+All distributed processes registered. Starting with 3 processes
+----------------------------------------------------------------------------------------------------
+
+LOCAL_RANK: 1 - CUDA_VISIBLE_DEVICES: [0,1,2]
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0,1,2]
+LOCAL_RANK: 2 - CUDA_VISIBLE_DEVICES: [0,1,2]
+┏━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name          ┃ Type                 ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ vqvae         │ VQVAE                │ 21.1 M │ eval  │     0 │
+│ 1 │ resnet        │ ResNet               │ 33.9 M │ train │     0 │
+│ 2 │ cond_pos_embd │ AddBroadcastPosEmbed │  5.5 K │ train │     0 │
+│ 3 │ fc_in         │ Linear               │  147 K │ train │     0 │
+│ 4 │ attn_stack    │ AttentionStack       │ 37.3 M │ train │     0 │
+│ 5 │ norm          │ LayerNorm            │  1.2 K │ train │     0 │
+│ 6 │ fc_out        │ Linear               │  1.2 M │ train │     0 │
+└───┴───────────────┴──────────────────────┴────────┴───────┴───────┘
+Trainable params: 72.5 M                                                        
+Non-trainable params: 21.1 M                                                    
+Total params: 93.6 M                                                            
+Total estimated model params size (MB): 374                                     
+Modules in train mode: 368                                                      
+Modules in eval mode: 274                                                       
+Total FLOPs: 0                                                                  
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/_pytree.py:21: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 8. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/connectors/logger_connector/result.py:433: It is recommended to use `self.log('val/loss', ..., sync_dist=True)` when logging on epoch level in distributed setting to accumulate the metric across devices.
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py:317: The number of training batches (48) is smaller than the logging interval Trainer(log_every_n_steps=50). Set a lower value for log_every_n_steps if you want to see logs for the training epoch.
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py:534: Found 274 module(s) in eval mode at the start of training. This may lead to unexpected behavior during training. If this is intentional, you can ignore this warning.
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:1263: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. Starting in PyTorch 2.9, calling checkpoint without use_reentrant will raise an exception. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:1263: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. Starting in PyTorch 2.9, calling checkpoint without use_reentrant will raise an exception. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:1263: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. Starting in PyTorch 2.9, calling checkpoint without use_reentrant will raise an exception. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
+  return fn(*args, **kwargs)
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/autograd/graph.py:869: UserWarning: The AccumulateGrad node's stream does not match the stream of the node that produced the incoming gradient. This may incur unnecessary synchronization and break CUDA graph capture if the AccumulateGrad node's stream is the default stream. This mismatch is caused by an AccumulateGrad node created prior to the current iteration being kept alive. This can happen if the autograd graph is still being kept alive by tensors such as the loss, or if you are using DDP, which will stash a reference to the node. To resolve the mismatch, delete all references to the autograd graph or ensure that DDP initialization is performed under the same stream as subsequent forwards. If the mismatch is intentional, you can use torch.autograd.graph.set_warn_on_accumulate_grad_stream_mismatch(False) to suppress this warning. (Triggered internally at /pytorch/torch/csrc/autograd/input_buffer.cpp:240.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/autograd/graph.py:869: UserWarning: The AccumulateGrad node's stream does not match the stream of the node that produced the incoming gradient. This may incur unnecessary synchronization and break CUDA graph capture if the AccumulateGrad node's stream is the default stream. This mismatch is caused by an AccumulateGrad node created prior to the current iteration being kept alive. This can happen if the autograd graph is still being kept alive by tensors such as the loss, or if you are using DDP, which will stash a reference to the node. To resolve the mismatch, delete all references to the autograd graph or ensure that DDP initialization is performed under the same stream as subsequent forwards. If the mismatch is intentional, you can use torch.autograd.graph.set_warn_on_accumulate_grad_stream_mismatch(False) to suppress this warning. (Triggered internally at /pytorch/torch/csrc/autograd/input_buffer.cpp:240.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/autograd/graph.py:869: UserWarning: The AccumulateGrad node's stream does not match the stream of the node that produced the incoming gradient. This may incur unnecessary synchronization and break CUDA graph capture if the AccumulateGrad node's stream is the default stream. This mismatch is caused by an AccumulateGrad node created prior to the current iteration being kept alive. This can happen if the autograd graph is still being kept alive by tensors such as the loss, or if you are using DDP, which will stash a reference to the node. To resolve the mismatch, delete all references to the autograd graph or ensure that DDP initialization is performed under the same stream as subsequent forwards. If the mismatch is intentional, you can use torch.autograd.graph.set_warn_on_accumulate_grad_stream_mismatch(False) to suppress this warning. (Triggered internally at /pytorch/torch/csrc/autograd/input_buffer.cpp:240.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 2. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+[rank: 0] Received SIGTERM: 15
+[rank: 1] Received SIGTERM: 15
+[rank: 0] Received SIGTERM: 15
+[rank: 2] Received SIGTERM: 15
+--- Logging error ---
+[rank: 1] Received SIGTERM: 15
+[rank: 1] Received SIGTERM: 15
+Traceback (most recent call last):
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+RuntimeError: reentrant call inside <_io.BufferedWriter name='<stderr>'>
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/connectors/signal_connector.py", line 36, in __call__
+    signal_handler(signum, frame)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/connectors/signal_connector.py", line 109, in _sigterm_notifier_fn
+    log.info(rank_prefixed_message(f"Received SIGTERM: {signum}", self.trainer.local_rank))
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 1489, in info
+    self._log(INFO, msg, args, **kwargs)
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 1634, in _log
+    self.handle(record)
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 1644, in handle
+    self.callHandlers(record)
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 1706, in callHandlers
+    hdlr.handle(record)
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 978, in handle
+    self.emit(record)
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 1118, in emit
+    self.handleError(record)
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/logging/__init__.py", line 1031, in handleError
+    sys.stderr.write('--- Logging error ---\n')
+RuntimeError: reentrant call inside <_io.BufferedWriter name='<stderr>'>
+Call stack:
+  File "/mnt/data/code/VideoGPT/scripts/train_surgwmbench_videogpt.py", line 83, in <module>
+    main()
+  File "/mnt/data/code/VideoGPT/scripts/train_surgwmbench_videogpt.py", line 79, in main
+    trainer.fit(model, data)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 584, in fit
+    call._call_and_handle_interrupt(
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/call.py", line 48, in _call_and_handle_interrupt
+    return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/launchers/subprocess_script.py", line 105, in launch
+    return function(*args, **kwargs)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 630, in _fit_impl
+    self._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1079, in _run
+    results = self._run_stage()
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1123, in _run_stage
+    self.fit_loop.run()
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py", line 217, in run
+    self.advance()
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py", line 465, in advance
+    self.epoch_loop.run(self._data_fetcher)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 153, in run
+    self.advance(data_fetcher)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 311, in advance
+    batch, _, __ = next(data_fetcher)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fetchers.py", line 134, in __next__
+    batch = super().__next__()
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fetchers.py", line 61, in __next__
+    batch = next(self.iterator)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/combined_loader.py", line 341, in __next__
+    out = next(self._iterator)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/combined_loader.py", line 78, in __next__
+    out[i] = next(self.iterators[i])
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 741, in __next__
+    data = self._next_data()
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1524, in _next_data
+    idx, data = self._get_data()
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1473, in _get_data
+    success, data = self._try_get_data()
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1310, in _try_get_data
+    data = self._data_queue.get(timeout=timeout)
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/queue.py", line 180, in get
+    self.not_empty.wait(remaining)
+  File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 331, in wait
+    gotit = waiter.acquire(True, timeout)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/connectors/signal_connector.py", line 36, in __call__
+    signal_handler(signum, frame)
+  File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/connectors/signal_connector.py", line 109, in _sigterm_notifier_fn
+    log.info(rank_prefixed_message(f"Received SIGTERM: {signum}", self.trainer.local_rank))
+Message: '[rank: 2] Received SIGTERM: 15'
+Arguments: ()
+Epoch 21/-2                   0/48 0:00:06 • -:--:-- 0.00it/s v_num: 9.000      
+                                                              val/loss: 2.469   
+[rank2]: Traceback (most recent call last):
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1310, in _try_get_data
+[rank2]:     data = self._data_queue.get(timeout=timeout)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/queue.py", line 180, in get
+[rank2]:     self.not_empty.wait(remaining)
+[rank2]:   File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 331, in wait
+[rank2]:     gotit = waiter.acquire(True, timeout)
+[rank2]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/_utils/signal_handling.py", line 73, in handler
+[rank2]:     _error_if_any_worker_fails()
+[rank2]: RuntimeError: DataLoader worker (pid 757493) is killed by signal: Terminated. 
+
+[rank2]: The above exception was the direct cause of the following exception:
+
+[rank2]: Traceback (most recent call last):
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/call.py", line 48, in _call_and_handle_interrupt
+[rank2]:     return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/launchers/subprocess_script.py", line 105, in launch
+[rank2]:     return function(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 630, in _fit_impl
+[rank2]:     self._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1079, in _run
+[rank2]:     results = self._run_stage()
+[rank2]:               ^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1123, in _run_stage
+[rank2]:     self.fit_loop.run()
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py", line 217, in run
+[rank2]:     self.advance()
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py", line 465, in advance
+[rank2]:     self.epoch_loop.run(self._data_fetcher)
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 153, in run
+[rank2]:     self.advance(data_fetcher)
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 311, in advance
+[rank2]:     batch, _, __ = next(data_fetcher)
+[rank2]:                    ^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fetchers.py", line 134, in __next__
+[rank2]:     batch = super().__next__()
+[rank2]:             ^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fetchers.py", line 61, in __next__
+[rank2]:     batch = next(self.iterator)
+[rank2]:             ^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/combined_loader.py", line 341, in __next__
+[rank2]:     out = next(self._iterator)
+[rank2]:           ^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/combined_loader.py", line 78, in __next__
+[rank2]:     out[i] = next(self.iterators[i])
+[rank2]:              ^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 741, in __next__
+[rank2]:     data = self._next_data()
+[rank2]:            ^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1524, in _next_data
+[rank2]:     idx, data = self._get_data()
+[rank2]:                 ^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1473, in _get_data
+[rank2]:     success, data = self._try_get_data()
+[rank2]:                     ^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1323, in _try_get_data
+[rank2]:     raise RuntimeError(
+[rank2]: RuntimeError: DataLoader worker (pid(s) 757493) exited unexpectedly
+
+[rank2]: During handling of the above exception, another exception occurred:
+
+[rank2]: Traceback (most recent call last):
+[rank2]:   File "/mnt/data/code/VideoGPT/scripts/train_surgwmbench_videogpt.py", line 83, in <module>
+[rank2]:     main()
+[rank2]:   File "/mnt/data/code/VideoGPT/scripts/train_surgwmbench_videogpt.py", line 79, in main
+[rank2]:     trainer.fit(model, data)
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 584, in fit
+[rank2]:     call._call_and_handle_interrupt(
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/call.py", line 70, in _call_and_handle_interrupt
+[rank2]:     trainer._teardown()
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1102, in _teardown
+[rank2]:     self.strategy.teardown()
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/ddp.py", line 444, in teardown
+[rank2]:     super().teardown()
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/parallel.py", line 134, in teardown
+[rank2]:     super().teardown()
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/strategy.py", line 532, in teardown
+[rank2]:     _optimizers_to_device(self.optimizers, torch.device("cpu"))
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_fabric/utilities/optimizer.py", line 27, in _optimizers_to_device
+[rank2]:     _optimizer_to_device(opt, device)
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_fabric/utilities/optimizer.py", line 41, in _optimizer_to_device
+[rank2]:     v[key] = move_data_to_device(val, device)
+[rank2]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_fabric/utilities/apply_func.py", line 110, in move_data_to_device
+[rank2]:     return apply_to_collection(batch, dtype=_TransferableDataType, function=batch_to)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_utilities/core/apply_func.py", line 70, in apply_to_collection
+[rank2]:     return function(data, *args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_fabric/utilities/apply_func.py", line 104, in batch_to
+[rank2]:     data_output = data.to(device, **kwargs)
+[rank2]:                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/_utils/signal_handling.py", line 73, in handler
+[rank2]:     _error_if_any_worker_fails()
+[rank2]: RuntimeError: DataLoader worker (pid 757199) is killed by signal: Terminated. 
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/call.py", line 48, in _call_and_handle_interrupt
+[rank0]:     return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/launchers/subprocess_script.py", line 105, in launch
+[rank0]:     return function(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 630, in _fit_impl
+[rank0]:     self._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1079, in _run
+[rank0]:     results = self._run_stage()
+[rank0]:               ^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1123, in _run_stage
+[rank0]:     self.fit_loop.run()
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py", line 217, in run
+[rank0]:     self.advance()
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py", line 465, in advance
+[rank0]:     self.epoch_loop.run(self._data_fetcher)
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 153, in run
+[rank0]:     self.advance(data_fetcher)
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 311, in advance
+[rank0]:     batch, _, __ = next(data_fetcher)
+[rank0]:                    ^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fetchers.py", line 134, in __next__
+[rank0]:     batch = super().__next__()
+[rank0]:             ^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fetchers.py", line 61, in __next__
+[rank0]:     batch = next(self.iterator)
+[rank0]:             ^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/combined_loader.py", line 341, in __next__
+[rank0]:     out = next(self._iterator)
+[rank0]:           ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/combined_loader.py", line 78, in __next__
+[rank0]:     out[i] = next(self.iterators[i])
+[rank0]:              ^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 741, in __next__
+[rank0]:     data = self._next_data()
+[rank0]:            ^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1524, in _next_data
+[rank0]:     idx, data = self._get_data()
+[rank0]:                 ^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1473, in _get_data
+[rank0]:     success, data = self._try_get_data()
+[rank0]:                     ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1310, in _try_get_data
+[rank0]:     data = self._data_queue.get(timeout=timeout)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/queue.py", line 180, in get
+[rank0]:     self.not_empty.wait(remaining)
+[rank0]:   File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 331, in wait
+[rank0]:     gotit = waiter.acquire(True, timeout)
+[rank0]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/_utils/signal_handling.py", line 73, in handler
+[rank0]:     _error_if_any_worker_fails()
+[rank0]: RuntimeError: DataLoader worker (pid 757129) is killed by signal: Terminated. 
+
+[rank0]: During handling of the above exception, another exception occurred:
+
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/mnt/data/code/VideoGPT/scripts/train_surgwmbench_videogpt.py", line 83, in <module>
+[rank0]:     main()
+[rank0]:   File "/mnt/data/code/VideoGPT/scripts/train_surgwmbench_videogpt.py", line 79, in main
+[rank0]:     trainer.fit(model, data)
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 584, in fit
+[rank0]:     call._call_and_handle_interrupt(
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/call.py", line 70, in _call_and_handle_interrupt
+[rank0]:     trainer._teardown()
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1102, in _teardown
+[rank0]:     self.strategy.teardown()
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/ddp.py", line 444, in teardown
+[rank0]:     super().teardown()
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/parallel.py", line 134, in teardown
+[rank0]:     super().teardown()
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/strategy.py", line 532, in teardown
+[rank0]:     _optimizers_to_device(self.optimizers, torch.device("cpu"))
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_fabric/utilities/optimizer.py", line 27, in _optimizers_to_device
+[rank0]:     _optimizer_to_device(opt, device)
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_fabric/utilities/optimizer.py", line 41, in _optimizer_to_device
+[rank0]:     v[key] = move_data_to_device(val, device)
+[rank0]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_fabric/utilities/apply_func.py", line 110, in move_data_to_device
+[rank0]:     return apply_to_collection(batch, dtype=_TransferableDataType, function=batch_to)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_utilities/core/apply_func.py", line 70, in apply_to_collection
+[rank0]:     return function(data, *args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_fabric/utilities/apply_func.py", line 104, in batch_to
+[rank0]:     data_output = data.to(device, **kwargs)
+[rank0]:                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/_utils/signal_handling.py", line 73, in handler
+[rank0]:     _error_if_any_worker_fails()
+[rank0]: RuntimeError: DataLoader worker (pid 757654) is killed by signal: Terminated. 
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1310, in _try_get_data
+[rank1]:     data = self._data_queue.get(timeout=timeout)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/queue.py", line 180, in get
+[rank1]:     self.not_empty.wait(remaining)
+[rank1]:   File "/home/liuhuanrong/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 331, in wait
+[rank1]:     gotit = waiter.acquire(True, timeout)
+[rank1]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/_utils/signal_handling.py", line 73, in handler
+[rank1]:     _error_if_any_worker_fails()
+[rank1]: RuntimeError: DataLoader worker (pid 757494) is killed by signal: Terminated. 
+
+[rank1]: The above exception was the direct cause of the following exception:
+
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/call.py", line 48, in _call_and_handle_interrupt
+[rank1]:     return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/launchers/subprocess_script.py", line 105, in launch
+[rank1]:     return function(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 630, in _fit_impl
+[rank1]:     self._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1079, in _run
+[rank1]:     results = self._run_stage()
+[rank1]:               ^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1123, in _run_stage
+[rank1]:     self.fit_loop.run()
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py", line 217, in run
+[rank1]:     self.advance()
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fit_loop.py", line 465, in advance
+[rank1]:     self.epoch_loop.run(self._data_fetcher)
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 153, in run
+[rank1]:     self.advance(data_fetcher)
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 311, in advance
+[rank1]:     batch, _, __ = next(data_fetcher)
+[rank1]:                    ^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fetchers.py", line 134, in __next__
+[rank1]:     batch = super().__next__()
+[rank1]:             ^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/loops/fetchers.py", line 61, in __next__
+[rank1]:     batch = next(self.iterator)
+[rank1]:             ^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/combined_loader.py", line 341, in __next__
+[rank1]:     out = next(self._iterator)
+[rank1]:           ^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/utilities/combined_loader.py", line 78, in __next__
+[rank1]:     out[i] = next(self.iterators[i])
+[rank1]:              ^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 741, in __next__
+[rank1]:     data = self._next_data()
+[rank1]:            ^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1524, in _next_data
+[rank1]:     idx, data = self._get_data()
+[rank1]:                 ^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1473, in _get_data
+[rank1]:     success, data = self._try_get_data()
+[rank1]:                     ^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1323, in _try_get_data
+[rank1]:     raise RuntimeError(
+[rank1]: RuntimeError: DataLoader worker (pid(s) 757494) exited unexpectedly
+
+[rank1]: During handling of the above exception, another exception occurred:
+
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "/mnt/data/code/VideoGPT/scripts/train_surgwmbench_videogpt.py", line 83, in <module>
+[rank1]:     main()
+[rank1]:   File "/mnt/data/code/VideoGPT/scripts/train_surgwmbench_videogpt.py", line 79, in main
+[rank1]:     trainer.fit(model, data)
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 584, in fit
+[rank1]:     call._call_and_handle_interrupt(
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/call.py", line 70, in _call_and_handle_interrupt
+[rank1]:     trainer._teardown()
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/trainer/trainer.py", line 1102, in _teardown
+[rank1]:     self.strategy.teardown()
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/pytorch_lightning/strategies/ddp.py", line 438, in teardown
+[rank1]:     and pl_module._trainer.state.fn == TrainerFn.FITTING
+[rank1]:         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/lightning_utilities/core/enums.py", line 81, in __eq__
+[rank1]:     def __eq__(self, other: object) -> bool:
+
+[rank1]:   File "/mnt/data/code/VideoGPT/.venv/lib/python3.11/site-packages/torch/utils/data/_utils/signal_handling.py", line 73, in handler
+[rank1]:     _error_if_any_worker_fails()
+[rank1]: RuntimeError: DataLoader worker (pid 757100) is killed by signal: Terminated. 
+[rank1]:[E505 17:40:18.256890017 ProcessGroupNCCL.cpp:1914] [PG ID 0 PG GUID 0(default_pg) Rank 1] ProcessGroupNCCL's watchdog got stuck for 480 seconds without making progress in monitoring enqueued collectives. This typically indicates a NCCL/CUDA API (e.g., CudaEventDestroy) hang blocking the watchdog, and could be triggered by another thread holding the GIL inside a CUDA api (for example, CudaEventDestroy), or other deadlock-prone behaviors.If you suspect the watchdog is not actually stuck and a longer timeout would help, you can either increase the timeout (TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC) to a larger value or disable the heartbeat monitor (TORCH_NCCL_ENABLE_MONITORING=0).If either of aforementioned helps, feel free to file an issue to PyTorch about the short timeout or false positive abort; otherwise, please attempt to debug the hang. 
+[rank1]:[E505 17:40:18.260609090 ProcessGroupNCCL.cpp:1628] [PG ID 0 PG GUID 0(default_pg) Rank 1] ProcessGroupNCCL preparing to dump debug info. Include stack trace: 1, only active collectives: 0
+[rank1]:[F505 17:48:18.324779297 ProcessGroupNCCL.cpp:1653] [PG ID 0 PG GUID 0(default_pg) Rank 1] [PG ID 0 PG GUID 0(default_pg) Rank 1] Terminating the process after attempting to dump debug info, due to ProcessGroupNCCL watchdog hang.
