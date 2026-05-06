@@ -15,12 +15,47 @@ from .attention import AttentionStack, LayerNorm, AddBroadcastPosEmbed
 from .utils import shift_dim
 
 
+def augment_trajectory_context(context_coords, noise_std=0.0, mask_prob=0.0, training=True):
+    """Apply training-time noise and point masking to normalized context xy coords."""
+    coords = context_coords.float()
+    mask = torch.ones(coords.shape[:-1], dtype=coords.dtype, device=coords.device)
+    if not training:
+        return coords.clamp(0.0, 1.0), mask
+
+    noise_std = float(noise_std)
+    mask_prob = float(mask_prob)
+    if noise_std > 0.0:
+        coords = coords + torch.randn_like(coords) * noise_std
+    coords = coords.clamp(0.0, 1.0)
+    if mask_prob > 0.0:
+        keep = (torch.rand(mask.shape, device=coords.device) >= mask_prob).type_as(mask)
+        mask = mask * keep
+        coords = coords * mask.unsqueeze(-1)
+    return coords, mask
+
+
 class TrajectoryHead(nn.Module):
     """Predict future normalized xy anchors from encoded context-frame features."""
 
-    def __init__(self, input_dim, hidden_dim, n_future_frames, n_layers=1):
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim,
+        n_future_frames,
+        n_layers=1,
+        use_context_condition=False,
+    ):
         super().__init__()
         self.n_future_frames = int(n_future_frames)
+        self.use_context_condition = bool(use_context_condition)
+        if self.use_context_condition:
+            self.context_embedding = nn.Sequential(
+                nn.Linear(3, input_dim),
+                nn.LayerNorm(input_dim),
+                nn.GELU(),
+            )
+        else:
+            self.context_embedding = None
         self.encoder = nn.GRU(
             input_size=input_dim,
             hidden_size=hidden_dim,
@@ -34,9 +69,17 @@ class TrajectoryHead(nn.Module):
             nn.Linear(hidden_dim, self.n_future_frames * 2),
         )
 
-    def forward(self, frame_cond):
+    def forward(self, frame_cond, context_coords=None, context_mask=None):
         # frame_cond: BTHWC, where H/W are conditioning feature-grid axes.
         pooled = frame_cond.mean(dim=(2, 3))
+        if self.use_context_condition:
+            if context_coords is None or context_mask is None:
+                raise ValueError("context_coords and context_mask are required")
+            context = torch.cat(
+                [context_coords.type_as(pooled), context_mask.type_as(pooled).unsqueeze(-1)],
+                dim=-1,
+            )
+            pooled = pooled + self.context_embedding(context)
         _, hidden = self.encoder(pooled)
         coords = self.head(hidden[-1])
         coords = coords.view(-1, self.n_future_frames, 2)
@@ -75,6 +118,13 @@ class VideoGPT(pl.LightningModule):
             frame_cond_shape = None
 
         self.use_trajectory_head = bool(getattr(args, 'trajectory_head', False))
+        self.use_trajectory_condition = bool(getattr(args, 'trajectory_condition', False))
+        self.traj_condition_noise_std = float(getattr(args, 'traj_condition_noise_std', 0.0))
+        self.traj_condition_mask_prob = float(getattr(args, 'traj_condition_mask_prob', 0.0))
+        if self.traj_condition_noise_std < 0.0:
+            raise ValueError("traj_condition_noise_std must be non-negative")
+        if not 0.0 <= self.traj_condition_mask_prob <= 1.0:
+            raise ValueError("traj_condition_mask_prob must be in [0, 1]")
         if self.use_trajectory_head:
             if not self.use_frame_cond:
                 raise ValueError("Trajectory head requires n_cond_frames > 0")
@@ -86,6 +136,7 @@ class VideoGPT(pl.LightningModule):
                 hidden_dim=int(getattr(args, 'traj_hidden_dim', frame_cond_shape[-1])),
                 n_future_frames=n_future_frames,
                 n_layers=int(getattr(args, 'traj_layers', 1)),
+                use_context_condition=self.use_trajectory_condition,
             )
             self.traj_loss_weight = float(getattr(args, 'traj_loss_weight', 10.0))
         else:
@@ -119,17 +170,32 @@ class VideoGPT(pl.LightningModule):
     def encode_frame_cond(self, frame_cond):
         return self.cond_pos_embd(self.resnet(frame_cond))
 
-    def predict_trajectory_from_frame_cond(self, frame_cond):
+    def prepare_trajectory_context(self, batch, training):
+        if 'anchor_coords_norm' not in batch:
+            raise KeyError("Trajectory conditioning requires anchor_coords_norm in batch")
+        context_coords = batch['anchor_coords_norm'][:, :self.args.n_cond_frames]
+        return augment_trajectory_context(
+            context_coords,
+            noise_std=self.traj_condition_noise_std,
+            mask_prob=self.traj_condition_mask_prob,
+            training=training,
+        )
+
+    def predict_trajectory_from_frame_cond(self, frame_cond, context_coords=None, context_mask=None):
         if not self.use_trajectory_head:
             raise RuntimeError("This VideoGPT checkpoint does not have a trajectory head")
-        return self.trajectory_head(frame_cond)
+        return self.trajectory_head(frame_cond, context_coords, context_mask)
 
     def predict_trajectory(self, batch):
         if not self.use_frame_cond:
             raise RuntimeError("Trajectory prediction requires frame conditioning")
         video = batch['video']
         frame_cond = self.encode_frame_cond(video[:, :, :self.args.n_cond_frames])
-        return self.predict_trajectory_from_frame_cond(frame_cond)
+        context_coords = None
+        context_mask = None
+        if self.use_trajectory_condition:
+            context_coords, context_mask = self.prepare_trajectory_context(batch, training=False)
+        return self.predict_trajectory_from_frame_cond(frame_cond, context_coords, context_mask)
 
     def sample(self, n, batch=None):
         device = self.fc_in.weight.device
@@ -219,7 +285,18 @@ class VideoGPT(pl.LightningModule):
         if self.use_trajectory_head:
             if 'anchor_coords_norm' not in batch:
                 raise KeyError("Trajectory head training requires anchor_coords_norm in batch")
-            trajectory_pred = self.predict_trajectory_from_frame_cond(cond['frame_cond'])
+            context_coords = None
+            context_mask = None
+            if self.use_trajectory_condition:
+                context_coords, context_mask = self.prepare_trajectory_context(
+                    batch,
+                    training=self.training,
+                )
+            trajectory_pred = self.predict_trajectory_from_frame_cond(
+                cond['frame_cond'],
+                context_coords,
+                context_mask,
+            )
             trajectory_target = batch['anchor_coords_norm'][
                 :, self.args.n_cond_frames:self.args.n_cond_frames + trajectory_pred.shape[1]
             ].type_as(trajectory_pred)
@@ -230,6 +307,8 @@ class VideoGPT(pl.LightningModule):
                 'image_loss': image_loss,
                 'traj_loss': trajectory_loss,
             }
+            if context_mask is not None:
+                metrics['traj_condition_mask_rate'] = 1.0 - context_mask.mean()
 
         return total_loss, metrics
 
@@ -280,6 +359,18 @@ class VideoGPT(pl.LightningModule):
                             dest='traj_hidden_dim', type=int, default=240)
         parser.add_argument('--traj_layers', '--traj-layers',
                             dest='traj_layers', type=int, default=1)
+        parser.add_argument('--trajectory_condition', '--trajectory-condition',
+                            dest='trajectory_condition', action='store_true', default=False,
+                            help='condition trajectory head on the first n_cond_frames coords')
+        parser.add_argument('--no_trajectory_condition', '--no-trajectory-condition',
+                            dest='trajectory_condition', action='store_false',
+                            help='disable context trajectory conditioning')
+        parser.add_argument('--traj_condition_noise_std', '--traj-condition-noise-std',
+                            dest='traj_condition_noise_std', type=float, default=0.0,
+                            help='Gaussian noise std for normalized context trajectory coords')
+        parser.add_argument('--traj_condition_mask_prob', '--traj-condition-mask-prob',
+                            dest='traj_condition_mask_prob', type=float, default=0.0,
+                            help='per-context-anchor random mask probability')
 
         # VideoGPT hyperparmeters
         parser.add_argument('--hidden_dim', type=int, default=576)

@@ -10,7 +10,7 @@ from videogpt.surgwmbench_data import (
     restore_letterboxed_frame,
     surgwmbench_collate,
 )
-from videogpt.gpt import TrajectoryHead
+from videogpt.gpt import TrajectoryHead, augment_trajectory_context
 from videogpt.surgwmbench_metrics import (
     compute_psnr,
     compute_ssim,
@@ -174,3 +174,49 @@ def test_trajectory_head_predicts_future_anchor_shape():
     assert coords.shape == (2, 15, 2)
     assert torch.all(coords >= 0.0)
     assert torch.all(coords <= 1.0)
+
+
+def test_trajectory_head_accepts_context_trajectory_condition():
+    head = TrajectoryHead(
+        input_dim=4,
+        hidden_dim=8,
+        n_future_frames=15,
+        use_context_condition=True,
+    )
+    frame_cond = torch.randn(2, 5, 3, 3, 4)
+    context_coords = torch.rand(2, 5, 2)
+    context_mask = torch.ones(2, 5)
+
+    coords = head(frame_cond, context_coords, context_mask)
+
+    assert coords.shape == (2, 15, 2)
+    assert torch.all(coords >= 0.0)
+    assert torch.all(coords <= 1.0)
+
+
+def test_trajectory_context_augmentation_can_mask_all_conditions():
+    context_coords = torch.full((2, 5, 2), 0.5)
+
+    coords, mask = augment_trajectory_context(
+        context_coords,
+        noise_std=0.0,
+        mask_prob=1.0,
+        training=True,
+    )
+
+    assert torch.equal(coords, torch.zeros_like(coords))
+    assert torch.equal(mask, torch.zeros_like(mask))
+
+
+def test_trajectory_context_augmentation_disabled_for_eval():
+    context_coords = torch.full((2, 5, 2), 0.5)
+
+    coords, mask = augment_trajectory_context(
+        context_coords,
+        noise_std=10.0,
+        mask_prob=1.0,
+        training=False,
+    )
+
+    assert torch.equal(coords, context_coords)
+    assert torch.equal(mask, torch.ones_like(mask))

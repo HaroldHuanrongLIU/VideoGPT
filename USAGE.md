@@ -123,7 +123,9 @@ uv run python scripts/train_surgwmbench_vqvae.py \
 
 Use this mode for joint future image and future trajectory prediction. It
 optimizes image token loss plus trajectory loss and writes checkpoints with a
-`trajectory_head`.
+`trajectory_head`. The trajectory head is conditioned on the first 5 normalized
+trajectory points; during training those input trajectory conditions use
+Gaussian noise and random point masking for robustness.
 
 Single GPU:
 
@@ -141,6 +143,9 @@ uv run python scripts/train_surgwmbench_videogpt.py \
   --max_steps 200000 \
   --trajectory_head \
   --traj_loss_weight 10.0 \
+  --trajectory_condition \
+  --traj_condition_noise_std 0.01 \
+  --traj_condition_mask_prob 0.15 \
   --accelerator gpu \
   --devices 1
 ```
@@ -161,13 +166,45 @@ uv run python scripts/train_surgwmbench_videogpt.py \
   --max_steps 200000 \
   --trajectory_head \
   --traj_loss_weight 10.0 \
+  --trajectory_condition \
+  --traj_condition_noise_std 0.01 \
+  --traj_condition_mask_prob 0.15 \
   --accelerator gpu \
   --devices 4 \
   --strategy ddp_find_unused_parameters_false
 ```
 
-`scripts/train_surgwmbench_videogpt.py` enables the trajectory head by default,
-but `--trajectory_head` is shown explicitly for clarity.
+`scripts/train_surgwmbench_videogpt.py` enables the trajectory head and
+trajectory conditioning by default. Set `--traj_condition_noise_std 0.0` and
+`--traj_condition_mask_prob 0.0` to disable robust condition augmentation while
+keeping trajectory conditioning. Use `--no_trajectory_condition` to remove input
+trajectory conditioning entirely.
+
+### Disable Trajectory Condition Noise
+
+To keep trajectory conditioning and random masking but disable Gaussian noise,
+set only the noise standard deviation to zero:
+
+```bash
+--trajectory_condition \
+--traj_condition_noise_std 0.0 \
+--traj_condition_mask_prob 0.15
+```
+
+To disable both Gaussian noise and random masking while still using the first 5
+trajectory points as clean conditions:
+
+```bash
+--trajectory_condition \
+--traj_condition_noise_std 0.0 \
+--traj_condition_mask_prob 0.0
+```
+
+To remove trajectory conditions entirely:
+
+```bash
+--no_trajectory_condition
+```
 
 ## Image-only VideoGPT Training
 
@@ -236,6 +273,8 @@ Predictions are restored to original frame resolution before PSNR, SSIM, and
 LPIPS are computed. Trajectory metrics are reported as `ADE_px` and `FDE_px` in
 the original image pixel coordinate system. Per-sample future trajectories are
 written to `outputs/surgwmbench_videogpt_eval/predictions.jsonl`.
+Evaluation uses the clean first 5 trajectory points as conditions; noise and
+masking are training-only augmentations.
 
 Use `--lpips-downsample 64` for faster CPU smoke checks.
 
