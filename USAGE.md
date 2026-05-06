@@ -2,7 +2,8 @@
 
 This document covers the SurgWMBench 20-anchor VideoGPT workflow: create the
 standard uv environment, train the 20-frame VQ-VAE, then train a 5-frame
-conditioned VideoGPT model that predicts anchor frames 6-20.
+conditioned VideoGPT model that predicts anchor frames 6-20 and their future
+trajectory points.
 
 ## Environment
 
@@ -31,7 +32,30 @@ The default dataset root used by the scripts is:
 ```
 
 The training path uses official manifests only. Each sample loads the 20
-human-anchor frames identified by `sampled_indices`.
+human-anchor frames identified by `sampled_indices` plus the matching sparse
+human trajectory coordinates.
+
+## Python Command Usage
+
+All examples below use direct Python entry points. The recommended form is
+`uv run python ...` because it uses the locked `.venv` without manually
+activating the environment:
+
+```bash
+uv run python scripts/train_surgwmbench_videogpt.py -h
+```
+
+If you have already activated the uv environment, the equivalent command is:
+
+```bash
+source .venv/bin/activate
+python scripts/train_surgwmbench_videogpt.py -h
+```
+
+The same rule applies to training and evaluation scripts. For example,
+`uv run python scripts/eval_surgwmbench_videogpt.py ...` is equivalent to
+`python scripts/eval_surgwmbench_videogpt.py ...` inside the activated `.venv`.
+Do not run these scripts with system Python outside the uv environment.
 
 ## Changing Dataset Path
 
@@ -56,9 +80,11 @@ Do not edit the official manifest files or create random splits. Keep using
 `manifests/train.jsonl`, `manifests/val.jsonl`, and `manifests/test.jsonl`
 from the dataset root.
 
-## Single-GPU Training
+## VQ-VAE Training
 
-Train the SurgWMBench 20-anchor VQ-VAE first:
+Train the SurgWMBench 20-anchor VQ-VAE before training any VideoGPT variant.
+
+Single GPU:
 
 ```bash
 uv run python scripts/train_surgwmbench_vqvae.py \
@@ -74,29 +100,7 @@ uv run python scripts/train_surgwmbench_vqvae.py \
   --devices 1
 ```
 
-Then train VideoGPT with the VQ-VAE checkpoint:
-
-```bash
-uv run python scripts/train_surgwmbench_videogpt.py \
-  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
-  --train-manifest manifests/train.jsonl \
-  --val-manifest manifests/val.jsonl \
-  --vqvae <path-to-vqvae.ckpt> \
-  --sequence_length 20 \
-  --n_cond_frames 5 \
-  --resolution 128 \
-  --batch_size 2 \
-  --num_workers 8 \
-  --max_steps 200000 \
-  --accelerator gpu \
-  --devices 1
-```
-
-## Multi-GPU Training
-
-Use Lightning DDP by setting `--devices` to the number of visible GPUs.
-
-VQ-VAE multi-GPU:
+Multi GPU:
 
 ```bash
 uv run python scripts/train_surgwmbench_vqvae.py \
@@ -113,31 +117,111 @@ uv run python scripts/train_surgwmbench_vqvae.py \
   --strategy ddp
 ```
 
-VideoGPT multi-GPU:
+`--batch_size` is per process/GPU under DDP. Adjust it for GPU memory.
+
+## Joint VideoGPT Training
+
+Use this mode for joint future image and future trajectory prediction. It
+optimizes image token loss plus trajectory loss and writes checkpoints with a
+`trajectory_head`.
+
+Single GPU:
 
 ```bash
 uv run python scripts/train_surgwmbench_videogpt.py \
-  --dataset-root /mnt/data/neurips2026_dataset_track/SurgWMBench \
+  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
   --train-manifest manifests/train.jsonl \
   --val-manifest manifests/val.jsonl \
-  --vqvae lightning_logs/version_1/checkpoints/epoch=52-step=5000.ckpt \
+  --vqvae <path-to-vqvae.ckpt> \
   --sequence_length 20 \
   --n_cond_frames 5 \
   --resolution 128 \
   --batch_size 2 \
   --num_workers 8 \
   --max_steps 200000 \
+  --trajectory_head \
+  --traj_loss_weight 10.0 \
+  --accelerator gpu \
+  --devices 1
+```
+
+Multi GPU:
+
+```bash
+uv run python scripts/train_surgwmbench_videogpt.py \
+  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
+  --train-manifest manifests/train.jsonl \
+  --val-manifest manifests/val.jsonl \
+  --vqvae <path-to-vqvae.ckpt> \
+  --sequence_length 20 \
+  --n_cond_frames 5 \
+  --resolution 128 \
+  --batch_size 2 \
+  --num_workers 8 \
+  --max_steps 200000 \
+  --trajectory_head \
+  --traj_loss_weight 10.0 \
   --accelerator gpu \
   --devices 4 \
   --strategy ddp_find_unused_parameters_false
 ```
 
-`--batch_size` is per process/GPU under DDP. Adjust it for GPU memory.
+`scripts/train_surgwmbench_videogpt.py` enables the trajectory head by default,
+but `--trajectory_head` is shown explicitly for clarity.
+
+## Image-only VideoGPT Training
+
+Use this mode for image prediction ablations. It disables the trajectory head and
+optimizes only the VideoGPT image token loss.
+
+Single GPU:
+
+```bash
+uv run python scripts/train_surgwmbench_videogpt.py \
+  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
+  --train-manifest manifests/train.jsonl \
+  --val-manifest manifests/val.jsonl \
+  --vqvae <path-to-vqvae.ckpt> \
+  --sequence_length 20 \
+  --n_cond_frames 5 \
+  --resolution 128 \
+  --batch_size 2 \
+  --num_workers 8 \
+  --max_steps 200000 \
+  --no_trajectory_head \
+  --accelerator gpu \
+  --devices 1
+```
+
+Multi GPU:
+
+```bash
+uv run python scripts/train_surgwmbench_videogpt.py \
+  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
+  --train-manifest manifests/train.jsonl \
+  --val-manifest manifests/val.jsonl \
+  --vqvae <path-to-vqvae.ckpt> \
+  --sequence_length 20 \
+  --n_cond_frames 5 \
+  --resolution 128 \
+  --batch_size 2 \
+  --num_workers 8 \
+  --max_steps 200000 \
+  --no_trajectory_head \
+  --accelerator gpu \
+  --devices 4 \
+  --strategy ddp_find_unused_parameters_false
+```
+
+Image-only checkpoints do not report `traj_loss`, and evaluation skips
+trajectory metrics for those checkpoints.
 
 ## Evaluation
 
 Evaluate one VideoGPT checkpoint on the test manifest. The script generates the
-future anchor sequence and reports metrics for horizons 5, 10, and 15:
+future anchor sequence and, when the checkpoint has a trajectory head, predicts
+future trajectory points. It reports horizons 5, 10, and 15, corresponding to
+anchors 6-10, 6-15, and 6-20:
 
 ```bash
 uv run python scripts/eval_surgwmbench_videogpt.py \
@@ -149,7 +233,11 @@ uv run python scripts/eval_surgwmbench_videogpt.py \
 ```
 
 Predictions are restored to original frame resolution before PSNR, SSIM, and
-LPIPS are computed. Use `--lpips-downsample 64` for faster CPU smoke checks.
+LPIPS are computed. Trajectory metrics are reported as `ADE_px` and `FDE_px` in
+the original image pixel coordinate system. Per-sample future trajectories are
+written to `outputs/surgwmbench_videogpt_eval/predictions.jsonl`.
+
+Use `--lpips-downsample 64` for faster CPU smoke checks.
 
 ## Smoke Commands
 

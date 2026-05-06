@@ -15,6 +15,34 @@ from .attention import AttentionStack, LayerNorm, AddBroadcastPosEmbed
 from .utils import shift_dim
 
 
+class TrajectoryHead(nn.Module):
+    """Predict future normalized xy anchors from encoded context-frame features."""
+
+    def __init__(self, input_dim, hidden_dim, n_future_frames, n_layers=1):
+        super().__init__()
+        self.n_future_frames = int(n_future_frames)
+        self.encoder = nn.GRU(
+            input_size=input_dim,
+            hidden_size=hidden_dim,
+            num_layers=n_layers,
+            batch_first=True,
+        )
+        self.head = nn.Sequential(
+            nn.LayerNorm(hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, self.n_future_frames * 2),
+        )
+
+    def forward(self, frame_cond):
+        # frame_cond: BTHWC, where H/W are conditioning feature-grid axes.
+        pooled = frame_cond.mean(dim=(2, 3))
+        _, hidden = self.encoder(pooled)
+        coords = self.head(hidden[-1])
+        coords = coords.view(-1, self.n_future_frames, 2)
+        return torch.sigmoid(coords)
+
+
 class VideoGPT(pl.LightningModule):
     def __init__(self, args):
         super().__init__()
@@ -46,6 +74,24 @@ class VideoGPT(pl.LightningModule):
         else:
             frame_cond_shape = None
 
+        self.use_trajectory_head = bool(getattr(args, 'trajectory_head', False))
+        if self.use_trajectory_head:
+            if not self.use_frame_cond:
+                raise ValueError("Trajectory head requires n_cond_frames > 0")
+            n_future_frames = int(getattr(args, 'sequence_length', 20)) - int(args.n_cond_frames)
+            if n_future_frames <= 0:
+                raise ValueError("Trajectory head requires future frames after conditioning")
+            self.trajectory_head = TrajectoryHead(
+                input_dim=frame_cond_shape[-1],
+                hidden_dim=int(getattr(args, 'traj_hidden_dim', frame_cond_shape[-1])),
+                n_future_frames=n_future_frames,
+                n_layers=int(getattr(args, 'traj_layers', 1)),
+            )
+            self.traj_loss_weight = float(getattr(args, 'traj_loss_weight', 10.0))
+        else:
+            self.trajectory_head = None
+            self.traj_loss_weight = 0.0
+
         # VideoGPT transformer
         self.shape = self.vqvae.latent_shape
 
@@ -69,6 +115,21 @@ class VideoGPT(pl.LightningModule):
 
     def get_reconstruction(self, videos):
         return self.vqvae.decode(self.vqvae.encode(videos))
+
+    def encode_frame_cond(self, frame_cond):
+        return self.cond_pos_embd(self.resnet(frame_cond))
+
+    def predict_trajectory_from_frame_cond(self, frame_cond):
+        if not self.use_trajectory_head:
+            raise RuntimeError("This VideoGPT checkpoint does not have a trajectory head")
+        return self.trajectory_head(frame_cond)
+
+    def predict_trajectory(self, batch):
+        if not self.use_frame_cond:
+            raise RuntimeError("Trajectory prediction requires frame conditioning")
+        video = batch['video']
+        frame_cond = self.encode_frame_cond(video[:, :, :self.args.n_cond_frames])
+        return self.predict_trajectory_from_frame_cond(frame_cond)
 
     def sample(self, n, batch=None):
         device = self.fc_in.weight.device
@@ -120,9 +181,9 @@ class VideoGPT(pl.LightningModule):
     def forward(self, x, targets, cond, decode_step=None, decode_idx=None):
         if self.use_frame_cond:
             if decode_step is None:
-                cond['frame_cond'] = self.cond_pos_embd(self.resnet(cond['frame_cond']))
+                cond['frame_cond'] = self.encode_frame_cond(cond['frame_cond'])
             elif decode_step == 0:
-                self.frame_cond_cache = self.cond_pos_embd(self.resnet(cond['frame_cond']))
+                self.frame_cond_cache = self.encode_frame_cond(cond['frame_cond'])
                 cond['frame_cond'] = self.frame_cond_cache
             else:
                 cond['frame_cond'] = self.frame_cond_cache
@@ -136,7 +197,7 @@ class VideoGPT(pl.LightningModule):
 
         return loss, logits
 
-    def training_step(self, batch, batch_idx):
+    def _compute_losses(self, batch):
         self.vqvae.eval()
         x = batch['video']
 
@@ -151,12 +212,47 @@ class VideoGPT(pl.LightningModule):
             targets, x = self.vqvae.encode(x, include_embeddings=True)
             x = shift_dim(x, 1, -1)
 
-        loss, _ = self(x, targets, cond)
+        image_loss, _ = self(x, targets, cond)
+        total_loss = image_loss
+        metrics = {'loss': total_loss, 'image_loss': image_loss}
+
+        if self.use_trajectory_head:
+            if 'anchor_coords_norm' not in batch:
+                raise KeyError("Trajectory head training requires anchor_coords_norm in batch")
+            trajectory_pred = self.predict_trajectory_from_frame_cond(cond['frame_cond'])
+            trajectory_target = batch['anchor_coords_norm'][
+                :, self.args.n_cond_frames:self.args.n_cond_frames + trajectory_pred.shape[1]
+            ].type_as(trajectory_pred)
+            trajectory_loss = F.smooth_l1_loss(trajectory_pred, trajectory_target)
+            total_loss = image_loss + self.traj_loss_weight * trajectory_loss
+            metrics = {
+                'loss': total_loss,
+                'image_loss': image_loss,
+                'traj_loss': trajectory_loss,
+            }
+
+        return total_loss, metrics
+
+    def _log_losses(self, stage, metrics, on_step):
+        for name, value in metrics.items():
+            self.log(
+                f'{stage}/{name}',
+                value,
+                prog_bar=(name == 'loss'),
+                on_step=on_step,
+                on_epoch=True,
+                sync_dist=True,
+            )
+
+    def training_step(self, batch, batch_idx):
+        loss, metrics = self._compute_losses(batch)
+        self._log_losses('train', metrics, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss = self.training_step(batch, batch_idx)
-        self.log('val/loss', loss, prog_bar=True)
+        loss, metrics = self._compute_losses(batch)
+        self._log_losses('val', metrics, on_step=False)
+        return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=3e-4, betas=(0.9, 0.999))
@@ -172,6 +268,18 @@ class VideoGPT(pl.LightningModule):
                             help='path to vqvae ckpt, or model name to download pretrained')
         parser.add_argument('--n_cond_frames', type=int, default=0)
         parser.add_argument('--class_cond', action='store_true')
+        parser.add_argument('--trajectory_head', '--trajectory-head',
+                            dest='trajectory_head', action='store_true', default=False,
+                            help='train a future-anchor trajectory prediction head')
+        parser.add_argument('--no_trajectory_head', '--no-trajectory-head',
+                            dest='trajectory_head', action='store_false',
+                            help='disable trajectory head training')
+        parser.add_argument('--traj_loss_weight', '--traj-loss-weight',
+                            dest='traj_loss_weight', type=float, default=10.0)
+        parser.add_argument('--traj_hidden_dim', '--traj-hidden-dim',
+                            dest='traj_hidden_dim', type=int, default=240)
+        parser.add_argument('--traj_layers', '--traj-layers',
+                            dest='traj_layers', type=int, default=1)
 
         # VideoGPT hyperparmeters
         parser.add_argument('--hidden_dim', type=int, default=576)

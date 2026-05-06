@@ -65,3 +65,25 @@ def compute_image_metrics(prediction, target, lpips_model=None, lpips_device=Non
     if lpips_model is not None:
         metrics["lpips"] = compute_lpips(prediction, target, lpips_model, lpips_device)
     return metrics
+
+
+def normalized_coords_to_pixel(coords_norm, frame_geometries):
+    """Convert normalized xy coordinates to original-image pixel coordinates."""
+    coords_norm = coords_norm.detach().cpu().float()
+    frame_geometries = frame_geometries.detach().cpu().float()
+    scales = torch.stack(
+        [frame_geometries[..., 1], frame_geometries[..., 0]],
+        dim=-1,
+    )
+    return coords_norm * scales
+
+
+def compute_trajectory_metrics(prediction_px, target_px):
+    distances = torch.linalg.norm(
+        prediction_px.detach().cpu().float() - target_px.detach().cpu().float(),
+        dim=-1,
+    )
+    return {
+        "ade_px": float(distances.mean().item()),
+        "fde_px": float(distances[-1].item()),
+    }

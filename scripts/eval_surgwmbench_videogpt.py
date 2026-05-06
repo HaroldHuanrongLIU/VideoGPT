@@ -17,9 +17,11 @@ from videogpt.surgwmbench_data import (
 )
 from videogpt.surgwmbench_metrics import (
     MetricAccumulator,
+    compute_trajectory_metrics,
     compute_lpips,
     compute_psnr,
     compute_ssim,
+    normalized_coords_to_pixel,
 )
 
 
@@ -58,13 +60,22 @@ def build_metrics_json(
     overall,
     by_horizon,
     by_difficulty,
+    trajectory_overall,
+    trajectory_by_horizon,
+    trajectory_by_difficulty,
     sample_artifacts,
     num_samples,
+    predictions_path,
+    has_trajectory_head,
 ):
     return {
         "dataset_name": "SurgWMBench",
         "baseline": "VideoGPT",
-        "prediction_task": "20_anchor_future_frame_prediction",
+        "prediction_task": (
+            "20_anchor_future_frame_and_trajectory_prediction"
+            if has_trajectory_head
+            else "20_anchor_future_frame_prediction"
+        ),
         "data_track": "sparse_20_anchor",
         "manifest": args.manifest,
         "checkpoint": args.ckpt,
@@ -73,6 +84,7 @@ def build_metrics_json(
         "sequence_length": get_hparam(model_args, "sequence_length"),
         "resolution": get_hparam(model_args, "resolution"),
         "original_resolution_metrics": True,
+        "trajectory_head": has_trajectory_head,
         "lpips_downsample": args.lpips_downsample or None,
         "num_samples": num_samples,
         "image_metrics_overall": overall.summary(),
@@ -87,6 +99,19 @@ def build_metrics_json(
             }
             for difficulty, horizon_map in by_difficulty.items()
         },
+        "trajectory_metrics_overall": trajectory_overall.summary(),
+        "trajectory_metrics_by_horizon": {
+            str(horizon): accumulator.summary()
+            for horizon, accumulator in trajectory_by_horizon.items()
+        },
+        "trajectory_metrics_by_difficulty": {
+            difficulty: {
+                str(horizon): accumulator.summary()
+                for horizon, accumulator in horizon_map.items()
+            }
+            for difficulty, horizon_map in trajectory_by_difficulty.items()
+        },
+        "predictions_jsonl": str(predictions_path) if predictions_path is not None else None,
         "sample_artifacts": sample_artifacts,
     }
 
@@ -154,25 +179,62 @@ def main():
     output_dir = Path(args.output_dir)
     pred_dir = output_dir / "predictions"
     pred_dir.mkdir(parents=True, exist_ok=True)
+    has_trajectory_head = bool(getattr(gpt, "use_trajectory_head", False))
+    predictions_path = output_dir / "predictions.jsonl" if has_trajectory_head else None
+    if not has_trajectory_head:
+        print("checkpoint has no trajectory head; trajectory metrics will be empty")
 
     overall = MetricAccumulator()
     by_horizon = {horizon: MetricAccumulator() for horizon in args.horizons}
     by_difficulty = defaultdict(lambda: {horizon: MetricAccumulator() for horizon in args.horizons})
+    trajectory_overall = MetricAccumulator()
+    trajectory_by_horizon = {horizon: MetricAccumulator() for horizon in args.horizons}
+    trajectory_by_difficulty = defaultdict(
+        lambda: {horizon: MetricAccumulator() for horizon in args.horizons}
+    )
     sample_artifacts = []
     num_samples = 0
     max_horizon = max(args.horizons)
 
+    predictions_file = predictions_path.open("w") if predictions_path is not None else None
     with torch.no_grad():
         for batch in loader:
             batch = move_tensors_to_device(batch, device)
             batch_size = batch["video"].shape[0]
             samples = gpt.sample(batch_size, batch)
+            trajectory_pred_norm = None
+            if has_trajectory_head:
+                trajectory_pred_norm = gpt.predict_trajectory(batch)
 
             for sample_idx in range(batch_size):
                 difficulty = batch["difficulty"][sample_idx]
                 patient_id = batch["patient_id"][sample_idx]
                 trajectory_id = batch["trajectory_id"][sample_idx]
                 saved_for_sample = []
+                trajectory_record = None
+                trajectory_pred_px = None
+                trajectory_target_px = None
+
+                if trajectory_pred_norm is not None:
+                    trajectory_pred_norm_sample = trajectory_pred_norm[
+                        sample_idx, :max_horizon
+                    ].detach().cpu()
+                    future_geometries = batch["frame_geometries"][
+                        sample_idx,
+                        args.context_frames:args.context_frames + max_horizon,
+                    ]
+                    trajectory_pred_px = normalized_coords_to_pixel(
+                        trajectory_pred_norm_sample,
+                        future_geometries,
+                    )
+                    trajectory_target_px = batch["anchor_coords_px"][
+                        sample_idx,
+                        args.context_frames:args.context_frames + max_horizon,
+                    ].detach().cpu()
+                    trajectory_target_norm = batch["anchor_coords_norm"][
+                        sample_idx,
+                        args.context_frames:args.context_frames + max_horizon,
+                    ].detach().cpu()
 
                 restored_cache = {}
                 target_cache = {}
@@ -219,14 +281,43 @@ def main():
                         if horizon == max_horizon:
                             overall.update(metrics)
 
+                    if trajectory_pred_px is not None:
+                        trajectory_metrics = compute_trajectory_metrics(
+                            trajectory_pred_px[:horizon],
+                            trajectory_target_px[:horizon],
+                        )
+                        trajectory_by_horizon[horizon].update(trajectory_metrics)
+                        trajectory_by_difficulty[difficulty][horizon].update(trajectory_metrics)
+                        if horizon == max_horizon:
+                            trajectory_overall.update(trajectory_metrics)
+
+                if trajectory_pred_px is not None:
+                    trajectory_record = {
+                        "patient_id": patient_id,
+                        "trajectory_id": trajectory_id,
+                        "difficulty": difficulty,
+                        "future_anchor_start": args.context_frames + 1,
+                        "future_anchor_end": args.context_frames + max_horizon,
+                        "pred_coords_norm": trajectory_pred_norm_sample.tolist(),
+                        "pred_coords_px": trajectory_pred_px.tolist(),
+                        "target_coords_norm": trajectory_target_norm.tolist(),
+                        "target_coords_px": trajectory_target_px.tolist(),
+                    }
+                    predictions_file.write(json.dumps(trajectory_record) + "\n")
+
                 if saved_for_sample:
-                    sample_artifacts.append({
+                    artifact = {
                         "patient_id": patient_id,
                         "trajectory_id": trajectory_id,
                         "difficulty": difficulty,
                         "prediction_paths": saved_for_sample,
-                    })
+                    }
+                    if trajectory_record is not None:
+                        artifact["trajectory_prediction"] = trajectory_record
+                    sample_artifacts.append(artifact)
                 num_samples += 1
+    if predictions_file is not None:
+        predictions_file.close()
 
     metrics = build_metrics_json(
         args,
@@ -234,8 +325,13 @@ def main():
         overall,
         by_horizon,
         by_difficulty,
+        trajectory_overall,
+        trajectory_by_horizon,
+        trajectory_by_difficulty,
         sample_artifacts,
         num_samples,
+        predictions_path,
+        has_trajectory_head,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     metrics_path = output_dir / "metrics.json"

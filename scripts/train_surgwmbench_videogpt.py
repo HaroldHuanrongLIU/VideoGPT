@@ -43,7 +43,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser = add_trainer_args(parser)
     parser = VideoGPT.add_model_specific_args(parser)
-    parser.set_defaults(vqvae=None, n_cond_frames=5)
+    parser.set_defaults(vqvae=None, n_cond_frames=5, trajectory_head=True)
     parser = add_surgwmbench_data_args(parser)
     args = parser.parse_args()
 

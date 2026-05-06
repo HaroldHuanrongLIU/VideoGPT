@@ -10,7 +10,13 @@ from videogpt.surgwmbench_data import (
     restore_letterboxed_frame,
     surgwmbench_collate,
 )
-from videogpt.surgwmbench_metrics import compute_psnr, compute_ssim
+from videogpt.gpt import TrajectoryHead
+from videogpt.surgwmbench_metrics import (
+    compute_psnr,
+    compute_ssim,
+    compute_trajectory_metrics,
+    normalized_coords_to_pixel,
+)
 
 
 def _write_toy_surgwmbench(root):
@@ -99,6 +105,10 @@ def test_surgwmbench_anchor_dataset_loads_20_anchor_frames(tmp_path):
 
     assert sample["video"].shape == (3, 20, 16, 16)
     assert sample["anchor_local_frame_indices"].tolist() == list(range(20))
+    assert sample["anchor_coords_px"].shape == (20, 2)
+    assert sample["anchor_coords_norm"].shape == (20, 2)
+    assert sample["anchor_coords_px"][19].tolist() == [19.0, 20.0]
+    torch.testing.assert_close(sample["anchor_coords_norm"][0], torch.tensor([0.1, 0.2]))
     assert len(sample["frame_paths"]) == 20
     assert sample["difficulty"] == "low"
 
@@ -110,6 +120,8 @@ def test_surgwmbench_collate_preserves_metadata(tmp_path):
     batch = surgwmbench_collate([dataset[0], dataset[0]])
 
     assert batch["video"].shape == (2, 3, 20, 16, 16)
+    assert batch["anchor_coords_px"].shape == (2, 20, 2)
+    assert batch["anchor_coords_norm"].shape == (2, 20, 2)
     assert batch["patient_id"] == ["video_01", "video_01"]
     assert len(batch["frame_paths"][0]) == 20
 
@@ -129,3 +141,36 @@ def test_basic_image_metrics_identical_images():
 
     assert compute_psnr(image, image) == float("inf")
     assert compute_ssim(image, image) == 1.0
+
+
+def test_trajectory_metrics_use_pixel_distances():
+    pred = torch.tensor([[0.0, 0.0], [3.0, 4.0]])
+    target = torch.zeros(2, 2)
+
+    metrics = compute_trajectory_metrics(pred, target)
+
+    assert metrics["ade_px"] == 2.5
+    assert metrics["fde_px"] == 5.0
+
+
+def test_normalized_coords_convert_to_original_pixels():
+    coords_norm = torch.tensor([[0.5, 0.5], [1.0, 0.25]])
+    frame_geometries = torch.tensor([
+        [10, 20, 8, 16, 0, 0, 0, 0],
+        [30, 40, 12, 16, 0, 0, 0, 0],
+    ])
+
+    coords_px = normalized_coords_to_pixel(coords_norm, frame_geometries)
+
+    assert coords_px.tolist() == [[10.0, 5.0], [40.0, 7.5]]
+
+
+def test_trajectory_head_predicts_future_anchor_shape():
+    head = TrajectoryHead(input_dim=4, hidden_dim=8, n_future_frames=15)
+    frame_cond = torch.randn(2, 5, 3, 3, 4)
+
+    coords = head(frame_cond)
+
+    assert coords.shape == (2, 15, 2)
+    assert torch.all(coords >= 0.0)
+    assert torch.all(coords <= 1.0)

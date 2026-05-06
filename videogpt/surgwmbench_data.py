@@ -172,11 +172,20 @@ class SurgWMBenchAnchorDataset(data.Dataset):
             )
 
         frames = annotation["frames"]
+        human_anchors = annotation.get("human_anchors")
+        if human_anchors is None or len(human_anchors) != self.sequence_length:
+            raise ValueError(
+                f"Expected {self.sequence_length} human_anchors in {annotation_path}"
+            )
+
         tensors = []
         frame_paths = []
         geometries = []
+        anchor_coords_px = []
+        anchor_coords_norm = []
         for anchor_idx, local_frame_idx in enumerate(sampled_indices):
             frame_record = frames[int(local_frame_idx)]
+            anchor_record = human_anchors[anchor_idx]
             if self.strict:
                 if frame_record["local_frame_idx"] != int(local_frame_idx):
                     raise ValueError(f"Frame index mismatch in {annotation_path}")
@@ -184,6 +193,17 @@ class SurgWMBenchAnchorDataset(data.Dataset):
                     raise ValueError(f"sampled_indices entry is not human-labeled: {annotation_path}")
                 if frame_record["anchor_idx"] != anchor_idx:
                     raise ValueError(f"Anchor index mismatch in {annotation_path}")
+                if anchor_record["anchor_idx"] != anchor_idx:
+                    raise ValueError(f"Human anchor index mismatch in {annotation_path}")
+                if anchor_record["local_frame_idx"] != int(local_frame_idx):
+                    raise ValueError(f"Human anchor frame mismatch in {annotation_path}")
+
+            coord_px = anchor_record.get("coord_px", frame_record.get("human_coord_px"))
+            coord_norm = anchor_record.get("coord_norm", frame_record.get("human_coord_norm"))
+            if coord_px is None or coord_norm is None:
+                raise ValueError(f"Missing human anchor coordinates in {annotation_path}")
+            if len(coord_px) != 2 or len(coord_norm) != 2:
+                raise ValueError(f"Expected xy coordinates in {annotation_path}")
 
             frame_path = resolve_dataset_path(self.dataset_root, frame_record["frame_path"])
             frame = load_rgb_image(frame_path)
@@ -191,12 +211,16 @@ class SurgWMBenchAnchorDataset(data.Dataset):
             tensors.append(frame - 0.5)
             frame_paths.append(str(frame_path))
             geometries.append(geometry.to_tensor())
+            anchor_coords_px.append(torch.tensor(coord_px, dtype=torch.float32))
+            anchor_coords_norm.append(torch.tensor(coord_norm, dtype=torch.float32))
 
         return {
             "video": torch.stack(tensors, dim=1),
             "geometry": geometries[0],
             "frame_geometries": torch.stack(geometries, dim=0),
             "anchor_local_frame_indices": torch.tensor(sampled_indices, dtype=torch.long),
+            "anchor_coords_px": torch.stack(anchor_coords_px, dim=0),
+            "anchor_coords_norm": torch.stack(anchor_coords_norm, dim=0),
             "frame_paths": frame_paths,
             "patient_id": row["patient_id"],
             "source_video_id": row["source_video_id"],
@@ -214,6 +238,8 @@ def surgwmbench_collate(batch):
         "anchor_local_frame_indices": torch.stack(
             [item["anchor_local_frame_indices"] for item in batch], dim=0
         ),
+        "anchor_coords_px": torch.stack([item["anchor_coords_px"] for item in batch], dim=0),
+        "anchor_coords_norm": torch.stack([item["anchor_coords_norm"] for item in batch], dim=0),
     }
     for key in [
         "frame_paths",
