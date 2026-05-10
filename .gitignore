@@ -10,3 +10,6 @@ datasets/
 *.egg-info
 i3d_pretrained_400.pt
 *.png
+outputs/
+logs/eval_*.log
+logs/train_*.log

@@ -68,7 +68,7 @@ def main():
     model = VideoGPT(args)
 
     callbacks = [
-        ModelCheckpoint(monitor="val/loss", mode="min", save_top_k=-1)
+        ModelCheckpoint(monitor="val/loss", mode="min", save_top_k=-1, every_n_epochs=10)
     ]
     trainer = pl.Trainer(
         callbacks=callbacks,

@@ -121,6 +121,8 @@ class VideoGPT(pl.LightningModule):
         self.use_trajectory_condition = bool(getattr(args, 'trajectory_condition', False))
         self.traj_condition_noise_std = float(getattr(args, 'traj_condition_noise_std', 0.0))
         self.traj_condition_mask_prob = float(getattr(args, 'traj_condition_mask_prob', 0.0))
+        self.eval_traj_noise_std = 0.0
+        self.eval_traj_mask_prob = 0.0
         if self.traj_condition_noise_std < 0.0:
             raise ValueError("traj_condition_noise_std must be non-negative")
         if not 0.0 <= self.traj_condition_mask_prob <= 1.0:
@@ -174,11 +176,19 @@ class VideoGPT(pl.LightningModule):
         if 'anchor_coords_norm' not in batch:
             raise KeyError("Trajectory conditioning requires anchor_coords_norm in batch")
         context_coords = batch['anchor_coords_norm'][:, :self.args.n_cond_frames]
+        if training:
+            noise_std = self.traj_condition_noise_std
+            mask_prob = self.traj_condition_mask_prob
+            apply = True
+        else:
+            noise_std = float(self.eval_traj_noise_std)
+            mask_prob = float(self.eval_traj_mask_prob)
+            apply = noise_std > 0.0 or mask_prob > 0.0
         return augment_trajectory_context(
             context_coords,
-            noise_std=self.traj_condition_noise_std,
-            mask_prob=self.traj_condition_mask_prob,
-            training=training,
+            noise_std=noise_std,
+            mask_prob=mask_prob,
+            training=apply,
         )
 
     def predict_trajectory_from_frame_cond(self, frame_cond, context_coords=None, context_mask=None):

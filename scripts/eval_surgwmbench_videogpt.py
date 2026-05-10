@@ -86,6 +86,8 @@ def build_metrics_json(
         "original_resolution_metrics": True,
         "trajectory_head": has_trajectory_head,
         "lpips_downsample": args.lpips_downsample or None,
+        "eval_traj_noise_std": float(args.eval_noise_std),
+        "eval_traj_mask_prob": float(args.eval_mask_prob),
         "num_samples": num_samples,
         "image_metrics_overall": overall.summary(),
         "metrics_by_horizon": {
@@ -139,6 +141,18 @@ def main():
         help="Optional square size for LPIPS only. 0 keeps original resolution.",
     )
     parser.add_argument("--max-save-samples", type=int, default=16)
+    parser.add_argument(
+        "--eval-noise-std",
+        type=float,
+        default=0.0,
+        help="Inference-time Gaussian noise std applied to context trajectory coords.",
+    )
+    parser.add_argument(
+        "--eval-mask-prob",
+        type=float,
+        default=0.0,
+        help="Inference-time per-anchor random mask probability for context trajectory.",
+    )
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -146,6 +160,8 @@ def main():
 
     gpt = VideoGPT.load_from_checkpoint(args.ckpt, weights_only=False).to(device)
     gpt.eval()
+    gpt.eval_traj_noise_std = float(args.eval_noise_std)
+    gpt.eval_traj_mask_prob = float(args.eval_mask_prob)
     model_args = gpt.hparams["args"]
 
     sequence_length = int(get_hparam(model_args, "sequence_length"))
